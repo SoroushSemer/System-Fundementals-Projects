@@ -26,10 +26,10 @@
  * @return  A valid pointer if the operation is completely successful,
  * NULL if there is any error.
  */
-ARGO_VALUE *argo_read_value(FILE *f) {
-    // TO BE IMPLEMENTED.
-    abort();
-}
+// ARGO_VALUE *argo_read_value(FILE *f) {
+//     // TO BE IMPLEMENTED.
+//     abort();
+// }
 
 /**
  * @brief  Read JSON input from a specified input stream, attempt to
@@ -49,10 +49,10 @@ ARGO_VALUE *argo_read_value(FILE *f) {
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
-int argo_read_string(ARGO_STRING *s, FILE *f) {
-    // TO BE IMPLEMENTED.
-    abort();
-}
+// int argo_read_string(ARGO_STRING *s, FILE *f) {
+//     // TO BE IMPLEMENTED.
+//     abort();
+// }
 
 /**
  * @brief  Read JSON input from a specified input stream, attempt to
@@ -76,10 +76,11 @@ int argo_read_string(ARGO_STRING *s, FILE *f) {
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
-int argo_read_number(ARGO_NUMBER *n, FILE *f) {
-    // TO BE IMPLEMENTED.
-    abort();
-}
+
+// int argo_read_number(ARGO_NUMBER *n, FILE *f) {
+//     // TO BE IMPLEMENTED.
+//     abort();
+// }
 
 /**
  * @brief  Write canonical JSON representing a specified value to
@@ -94,9 +95,150 @@ int argo_read_number(ARGO_NUMBER *n, FILE *f) {
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
-int argo_write_value(ARGO_VALUE *v, FILE *f) {
-    // TO BE IMPLEMENTED.
-    abort();
+static int argo_str_equal(ARGO_STRING *s1, ARGO_STRING *s2){
+    if(s1->length != s2->length){
+        return 0;
+    }
+    for(int i =0; i<s1->length; i++){
+        if(*(s1->content+i) != *(s2->content+i)){
+            return 0;
+        }
+    }
+    return 1;
+}
+static int putSpaces(FILE* f){
+    if(!indent_level){
+        // indent_level = global_options & 0x000000FF;
+        indent_level=1;
+        if(!indent_level)
+            indent_level = -1;
+    }
+    if(indent_level>0){
+        fputc(ARGO_LF,f);
+        for(int i =0; i< indent_level*(global_options & 0x000000FF); i++){
+            fputc(ARGO_SPACE,f);
+        }
+    }
+    return 0;
+}
+
+int argo_write_object(ARGO_OBJECT *o, FILE *f){
+    fputc(ARGO_LBRACE,f);
+    putSpaces(f);
+    argo_write_value(o->member_list, f);
+    // fputc( ARGO_COMMA,f);
+    ARGO_VALUE *currentMember = o->member_list->next;
+    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+    while(currentMember->next != o->member_list){
+        argo_write_value(currentMember, f);
+        currentMember = currentMember->next;
+        fputc( ARGO_COMMA,f);
+        putSpaces(f);
+    }
+    argo_write_value(currentMember, f);
+    // indent_level -= global_options & 0x000000FF;
+    indent_level--;
+    if(indent_level){
+        putSpaces(f);
+        fputc( ARGO_RBRACE,f);
+    }
+    else{
+        fputc(ARGO_LF,f);
+        fputc( ARGO_RBRACE,f);
+        fputc(ARGO_LF,f);
+        
+    }
+    return 0;
+}
+
+int argo_write_array(ARGO_ARRAY *a, FILE *f){
+    fputc(ARGO_LBRACK,f);
+    putSpaces(f);
+    argo_write_value(a->element_list, f);
+    // fputc( ARGO_COMMA,f);
+    ARGO_VALUE *currentMember = a->element_list->next;
+    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+    while(currentMember->next != a->element_list){
+        argo_write_value(currentMember, f);
+        currentMember = currentMember->next;
+        fputc( ARGO_COMMA,f);
+    putSpaces(f);
+    }
+    argo_write_value(currentMember, f);
+    // indent_level -= global_options & 0x000000FF;
+    indent_level--;
+    
+    if(indent_level){
+        putSpaces(f);
+        fputc( ARGO_RBRACK,f);
+    }
+    else{
+        fputc(ARGO_LF,f);
+        fputc( ARGO_RBRACK,f);
+        fputc(ARGO_LF,f);
+        
+    }
+    return 0;
+}
+
+
+int argo_write_value(ARGO_VALUE *v, FILE *f) { //TODO
+    int n;
+    if(v->name.content){
+        fputc(ARGO_QUOTE,f);
+        n=argo_write_string(&v->name,f);
+        fputc(ARGO_QUOTE, f);
+        fputc(ARGO_COLON,f);
+        if(indent_level>0)
+            fputc(ARGO_SPACE,f);
+    }
+    switch (v->type)
+    {
+    case 1: //BASIC CASE
+        if(v->content.basic ==ARGO_NULL){
+            fputs( ARGO_NULL_TOKEN,f);
+        }
+        else if(v->content.basic==ARGO_TRUE){
+            fputs( ARGO_TRUE_TOKEN,f);
+        }
+        else if(v->content.basic == ARGO_FALSE){
+            fputs(ARGO_FALSE_TOKEN,f);
+        }
+        else{
+            return -1;
+        }
+        return n;
+        break;
+
+    case 2: //NUMBER CASE
+        // printf("PRINTING NUMBER");
+        return argo_write_number(&v->content.number, f);
+        break;
+
+    case 3: //STRING CASE
+        // printf("PRINTING STRING");
+        fputc(ARGO_QUOTE,f);
+        int x = argo_write_string(&v->content.string, f);
+        fputc(ARGO_QUOTE,f);
+        return x+n;
+        break;
+    
+    case 4: //OBJECT CASE
+        // printf("PRINTING OBJECT");
+        // indent_level += global_options & 0x000000FF;
+        indent_level++;
+        return argo_write_object(&v->content.object,f)+n;
+        break;
+    
+    case 5: //ARRAY CASE
+        // printf("PRINTING ARRAY");
+        // indent_level += global_options & 0x000000FF;
+        indent_level++;
+        return argo_write_array(&v->content.array, f)+n;
+    default:
+        break;
+    }
+    return -1;
 }
 
 /**
@@ -119,47 +261,72 @@ int argo_write_value(ARGO_VALUE *v, FILE *f) {
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
+int printHex(int val, FILE* f){
+     if(val >= 0 && val <= 9)
+            fputc(val+48, f);
+    else if(val>=10 && val<=15){
+        fputc(val+87,f);
+    }
+    else{
+        return -1;
+    }
+    return 0;
+}
+int fputHex(char c, FILE* f){
+        int val = (c & 0xF000) >> 3;
+        int x = printHex(val,f);
+        val = (c & 0x0F00) >> 2;
+        x+=printHex(val,f);
+        val = (c & 0x00F0) >> 1;
+        x+=printHex(val,f);
+        val = (c & 0x000F);
+        x+=printHex(val,f);
+        return x;
+}
 int argo_write_string(ARGO_STRING *s, FILE *f) {
     // TO BE IMPLEMENTED.
+    int x;
     for(int i = 0; i < s->length; i++){
-        switch (s->content[i])
+        switch (*(s->content+i))
         {
         case 0:
             break;
-        case 0x0022:
-            fprintf(f, "\"");
+        case ARGO_QUOTE:
+            fputs( "\\\"",f);
             break;
-        case 0x002F:
-            fprintf(f, "\\/");
+        case ARGO_FSLASH:
+            fputs("/",f);
             break;
-        case 0x005C:
-            fprintf(f, "\\\\");
+        case ARGO_BSLASH:
+            fputs("\\\\",f);
             break;
-        case 0x0008:
-            fprintf(f, "\\b");
+        case ARGO_BS:
+            fputs( "\\b",f);
             break;
-        case 0x000C:
-            fprintf(f, "\\f");
+        case ARGO_FF:
+            fputs( "\\f",f);
             break;
-        case 0x000A:
-            fprintf(f, "\\n");
+        case ARGO_LF:
+            fputs( "\\n",f);
             break; 
-        case 0x000D:
-            fprintf(f, "\\r");
+        case ARGO_CR:
+            fputs( "\\r",f);
             break;
-        case 0x0009:
-            fprintf(f, "\\t");
+        case ARGO_HT:
+            fputs( "\\t",f);
             break;
         default:
-            if(s->content[i] > 0x001F && s->content[i]<0x00FF){
-                fprintf(f, "%c", s->content[i]);
+            if(*(s->content+i) > 0x001F && *(s->content+i)<0x00FF){
+                fputc(*(s->content+i), f);
             }
             else{
-                fprintf(f, "\\u%4.4x", s->content[i]);
+                fputs("\\u",f);
+                x=fputHex(*(s->content+i),f);
+                // fprintf(f, "\\u%4.4x", *(s->content+i));  //TODO
             }
         }
     }
-    return 0;
+    return x;
 }
 
 /**
@@ -181,43 +348,139 @@ int argo_write_string(ARGO_STRING *s, FILE *f) {
  * nonzero if there is any error.
  */
 static int printFloat(double d,FILE *f){
-    if(d < 0){
-        fprintf(f,"-");
-        d/=-1;
+    if(d){
+        if(d < 0){
+            fputc(ARGO_MINUS,f);
+            d/=-1;
+        }
+        int exponent = 0; 
+        while(d >= 1){
+            d /=10;
+            exponent+=1;
+        }
+        while(d < 0.1){
+            d*=10;
+            exponent -=1;
+        }
+        // d-=0.000000000001;
+        fprintf(f,"%.16f",d);          //TODO
+        if(exponent!=0){
+            fputc(ARGO_E,f);
+            fprintf(f,"%d",exponent);
+        }
+        return 0;
     }
-    int exponent = 0; 
-    while(d >= 1){
-        d /=10;
-        exponent+=1;
+    else{
+        fputc('0', f);
+        return 0;
     }
-    while(d < 0.1){
-        d*=10;
-        exponent -=1;
+}
+static double strToFloat(ARGO_STRING *s){
+    double val = 0;
+    if(s->length==0){
+        return 0;
     }
-    d-=0.0000000000000001;
-    fprintf(f,"%.16f", d);
-    if(exponent!=0){
-        fprintf(f,"e%i",exponent);
+    int numberStartPos =0;
+    if(*(s->content) == ARGO_MINUS){
+        numberStartPos =1;
     }
-    return 0;
+    int exponentExists = 0;
+    int exponentStartPos;
+    int decimalExists = 0;
+    int decimalStartPos;
+    for(int i = numberStartPos; i<s->length; i++){
+        if( *(s->content+i) >=48 && *(s->content+i) <= 57){
+            if(!decimalExists){
+                val+=*(s->content+i) -48;
+                val*=10;
+            }
+            else{
+                double dec = (*(s->content+i) -48);
+                
+                for(int j =0; j<(i-decimalStartPos);j++){ 
+                    dec/=10;
+                }
+                val+=dec;
+            }
+        }
+        else if(argo_is_exponent(*(s->content + i))){
+            exponentExists=1;
+            exponentStartPos=i+1;
+            break;
+        }
+        else if(*(s->content+i)==ARGO_PERIOD){
+            decimalExists=1;
+            decimalStartPos=i;
+            val/=10;
+        }
+        else{
+            return 0;
+        }
+    }
+    if(!decimalExists){
+        val/=10;
+    }
+    int exponent=0;
+    if(exponentExists){
+        int exponentSign = 1;
+        if(*(s->content+exponentStartPos)==ARGO_MINUS){
+            exponentSign=-1;
+            exponentStartPos++;
+        }
+        for(int i = exponentStartPos; i<s->length; i++){
+            if(argo_is_digit(*(s->content+i))){
+                exponent+=*(s->content+i) -48;
+                exponent*=10;
+            }
+            else{
+                return 0;
+            }
+        }
+        exponent/=10;
+        exponent*=exponentSign;
+    }
+    if(exponent>0){
+        for(int i=0; i<exponent;i++){
+            val*=10;
+        }
+    }
+    else{
+        for(int i=exponent; i< 0;i++){
+            val/=10;
+        }
+    }
+    if(numberStartPos)
+        return val*-1;
+    else
+        return val;
 }
 int argo_write_number(ARGO_NUMBER *n, FILE *f) {
     // TO BE IMPLEMENTED.
     if(n->valid_int && n->valid_float && n->int_value != n->float_value){
         return -1;
     }
-    if(n->valid_string){
-        argo_write_string(&n->string_value,f);
+    if(n->valid_int && n->valid_string ){
+        if(n->int_value != strToFloat(&n->string_value)){
+            printf("String(%.16f)didnt match int(%ld)",strToFloat(&n->string_value), n->int_value);
+            return -1;
+            }
+    }
+    if(n->valid_string && n->valid_float ){
+        if(strToFloat(&n->string_value) > (n->float_value+0.000000000000001) || strToFloat(&n->string_value ) < (n->float_value-0.000000000000001)){
+             printf("String(%.16f)didnt match float(%.16f)",strToFloat(&n->string_value), n->float_value);
+            return -1;
+            }
+    }
+    if(n->valid_int){
+        fprintf(f, "%ld",n->int_value);
+        return 0;
     }
     else if(n->valid_float){
-        printFloat(n->float_value, f);
-        return 0;
+        return printFloat(n->float_value, f);;
     }
-    else if(n->valid_int){
-        fprintf(f,"%ld", n->int_value);
-        return 0;
+    else if(n->valid_string){
+        return printFloat(strToFloat(&n->string_value),f);
+        
     }
-    
-    
     return -1;
 }
