@@ -26,10 +26,200 @@
  * @return  A valid pointer if the operation is completely successful,
  * NULL if there is any error.
  */
-// ARGO_VALUE *argo_read_value(FILE *f) {
-//     // TO BE IMPLEMENTED.
-//     abort();
-// }
+int argo_read_object(ARGO_OBJECT *o, FILE *f){
+    char c = fgetc(f);
+    if(c == EOF)
+        return -1;
+    ARGO_VALUE *prev = NULL;
+    ARGO_VALUE *head = NULL;
+    ARGO_VALUE *v;
+    while(c != ARGO_RBRACE){
+        if(argo_is_whitespace(c)){
+            c=fgetc(f);
+            continue;
+        }
+        if(c!= ARGO_QUOTE)
+            return -1;
+        ARGO_STRING name;
+        int success = argo_read_string(&name, f);
+        if(success)
+            return -1;
+        c=fgetc(f); //get colon
+        if(argo_is_whitespace(c))
+            c=fgetc(f);
+        if(argo_is_whitespace(c)){
+            while(argo_is_whitespace(c))
+                c = fgetc(f);
+            ungetc(c,f);
+        }
+        v=argo_read_value(f);
+        if(!v)
+            return -1;
+        v->name = name;
+        if(!head){
+            head = v;
+        }
+        else{
+                v->prev = prev;
+                prev->next = v;
+        }
+         prev = v;
+
+        c=fgetc(f); // get rid of comma
+        if(c==1){
+            c=fgetc(f); // get rid of comma
+            ungetc(c,f); // get rid of comma
+        }
+        while(argo_is_whitespace(c))
+            c=fgetc(f);
+        if(c==ARGO_COMMA){
+            c=fgetc(f); // get rid of comma
+        }
+        if(c==EOF)
+            return -1;
+    }
+    if(head){
+        v->next = head;
+        head->prev = v;
+        o->member_list = head;
+    }
+    else
+        o->member_list = NULL;
+    fgetc(f);
+    return 0;
+}
+int argo_read_array(ARGO_ARRAY *a, FILE *f){
+    char c = fgetc(f);
+    if(c == EOF)
+        return -1;
+    ARGO_VALUE *prev = NULL;
+    ARGO_VALUE *head = NULL;
+    ARGO_VALUE *v;
+    int success;
+    while(c != ARGO_RBRACK){
+        if(argo_is_whitespace(c)){
+            c=fgetc(f);
+            continue;
+        }
+        ungetc(c,f);
+        v=argo_read_value(f);
+        if(!v)
+            return -1;
+        if(!head){
+            head = v;
+        }
+        else{
+                v->prev = prev;
+                prev->next = v;
+        }
+         prev = v;
+        
+        c=fgetc(f); // get rid of comma
+        
+        if(c==1){
+            c=fgetc(f); // get rid of comma
+            ungetc(c,f); // get rid of comma
+        }
+        while(argo_is_whitespace(c))
+            c=fgetc(f);
+        if(c==ARGO_COMMA){
+            c=fgetc(f); // get rid of comma
+        }
+        if(c==EOF)
+            return -1;
+    }
+    if(head){
+        v->next = head;
+        head->prev = v;
+        a->element_list = head;
+    }
+    else
+        a->element_list = NULL;
+    fgetc(f);
+    return 0;
+}
+
+ARGO_VALUE *argo_read_value(FILE *f) {
+    ARGO_VALUE v;
+    v.name.content = NULL;
+    int success=-1;
+    char c = fgetc(f);
+     while(argo_is_whitespace(c))
+        c = fgetc(f);
+    switch(c){
+        case ARGO_T: 
+            for(int i =0; i < 4;i++){
+                if(c!=*(ARGO_TRUE_TOKEN+i))
+                    return NULL;
+                c = fgetc(f);
+            
+            }
+            ungetc(c,f);
+            v.type = ARGO_BASIC_TYPE;
+            v.content.basic=ARGO_TRUE;
+            success = 0;
+            break;
+        case ARGO_F: 
+            for(int i =0; i < 5;i++){
+                if(c!=*(ARGO_FALSE_TOKEN+i))
+                    return NULL;
+                c = fgetc(f);
+            }
+            ungetc(c,f);
+            v.type = ARGO_BASIC_TYPE;
+            v.content.basic=ARGO_FALSE;
+            success = 0;
+            break;
+        case ARGO_N: 
+            for(int i =0; i < 4;i++){
+                if(c!=*(ARGO_NULL_TOKEN+i))
+                    return NULL;
+                c = fgetc(f);
+            }
+            ungetc(c,f);
+            v.type = ARGO_BASIC_TYPE;
+            v.content.basic=ARGO_NULL;
+            success = 0;
+            break;
+       
+        case ARGO_QUOTE:
+             v.type = ARGO_STRING_TYPE;
+            success = argo_read_string(&v.content.string, f);
+            break;
+        case ARGO_LBRACK: //ARRAY CASE
+            v.type = ARGO_ARRAY_TYPE;
+            success = argo_read_array(&v.content.array,f);
+            c = fgetc(f);
+            break;
+        case ARGO_LBRACE: //OBJECT CASE
+            v.type = ARGO_OBJECT_TYPE;
+            success = argo_read_object(&v.content.object,f);
+            c = fgetc(f);
+            break;
+        default:
+            if(argo_is_digit(c) || c == ARGO_MINUS){
+                v.type = ARGO_NUMBER_TYPE;
+                ungetc(c,f);
+                success = argo_read_number(&v.content.number, f);
+                break;
+            }
+            else
+                return NULL;
+    }
+    if(argo_is_whitespace(c)){
+        while(argo_is_whitespace(c))
+            c = fgetc(f);
+        ungetc(c,f);
+    }
+    if(!success){
+        ARGO_VALUE *a = (argo_value_storage+argo_next_value);
+        *a = v;
+        argo_next_value++;
+        return a;
+    }
+    else
+        return NULL;
+}
 
 /**
  * @brief  Read JSON input from a specified input stream, attempt to
@@ -49,10 +239,99 @@
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
-// int argo_read_string(ARGO_STRING *s, FILE *f) {
-//     // TO BE IMPLEMENTED.
-//     abort();
-// }
+
+int argo_read_string(ARGO_STRING *s, FILE *f) {
+    char c = fgetc(f);
+    ungetc(c,f);
+    c=fgetc(f);
+    s->length=0;
+    s->capacity=0;
+    if(c == EOF)
+        return -1;
+    while(c != ARGO_QUOTE){
+        if(c!= ARGO_BSLASH)
+            argo_append_char(s,c);
+        else{
+            char c2 = fgetc(f);
+            if(c2 == EOF)
+                return -1;
+            int val = 0;
+            char h;
+            switch (c2)
+            {
+            case ARGO_B:
+                argo_append_char(s,ARGO_BS);
+                break;
+            case ARGO_F:
+                argo_append_char(s,ARGO_FF);
+                break;
+            case ARGO_N:
+                argo_append_char(s,ARGO_LF);
+                break;
+            case ARGO_R:
+                argo_append_char(s,ARGO_CR);
+                break;
+            case ARGO_T:
+                argo_append_char(s,ARGO_HT);
+                break;
+            case ARGO_BSLASH:
+                argo_append_char(s,ARGO_BSLASH);
+                break;
+            case ARGO_FSLASH:
+                argo_append_char(s,ARGO_FSLASH);
+                break;
+            case ARGO_QUOTE:
+                argo_append_char(s,ARGO_QUOTE);
+                break;
+            case ARGO_U:
+                for(int i = 0; i< 4; i++){
+                    val*=16;
+                    h = fgetc(f);
+                    if(h == EOF)
+                        return -1;
+                    if(argo_is_digit(h)){
+                        val+= h-48;
+                    }
+                    else {
+                        switch (h)
+                        {
+                        case 'A': case 'a':
+                            val+=10;
+                            break;
+                        case 'B': case 'b':
+                            val+=11;
+                            break;
+                        case 'C': case 'c':
+                            val+=12;
+                            break;
+                        case 'D': case 'd':
+                            val+=13;
+                            break;
+                        case 'E': case 'e':
+                            val+=14;
+                            break;
+                        case 'F': case 'f':
+                            val+=15;
+                            break;
+                        default:
+                            return -1;
+                            break;
+                        }
+                    }
+                } 
+                argo_append_char(s,val);
+                break;
+            default:
+                return -1;
+                break;
+            }
+        }
+        c = fgetc(f); 
+        if(c == EOF)
+            return -1;
+    }
+    return 0;
+}
 
 /**
  * @brief  Read JSON input from a specified input stream, attempt to
@@ -77,10 +356,117 @@
  * nonzero if there is any error.
  */
 
-// int argo_read_number(ARGO_NUMBER *n, FILE *f) {
-//     // TO BE IMPLEMENTED.
-//     abort();
-// }
+
+int argo_read_number(ARGO_NUMBER *n, FILE *f) {
+    char c = fgetc(f);
+    n->string_value.length=0;
+    n->string_value.capacity=0;
+    if(c == EOF)
+        return -1;
+    while((argo_is_digit(c) || argo_is_exponent(c) || c == ARGO_MINUS || c == ARGO_PLUS || c == ARGO_PERIOD)){
+        argo_append_char(&n->string_value, c);
+        if(c == ARGO_PERIOD)
+            n->valid_float=1;
+        c=fgetc(f);
+    }
+    double val = 0;
+    if(n->string_value.length==0){
+        return -1;
+    }
+    int numberStartPos =0;
+    int numberStartPos2 =0;
+    if(*(n->string_value.content) == ARGO_MINUS){
+        numberStartPos =1;
+    }
+    else if(*(n->string_value.content) == ARGO_PLUS)
+        numberStartPos2 = 1;
+    int exponentExists = 0;
+    int exponentStartPos;
+    int decimalExists = 0;
+    int decimalStartPos;
+    for(int i = numberStartPos+numberStartPos2; i<n->string_value.length; i++){
+        if( *(n->string_value.content+i) >=48 && *(n->string_value.content+i) <= 57){
+            if(!decimalExists){
+                val+=*(n->string_value.content+i) -48;
+                val*=10;
+            }
+            else{
+                double dec = (*(n->string_value.content+i) -48);
+                
+                for(int j =0; j<(i-decimalStartPos);j++){ 
+                    dec/=10;
+                }
+                val+=dec;
+            }
+        }
+        else if(argo_is_exponent(*(n->string_value.content + i))){
+            exponentExists=1;
+            exponentStartPos=i+1;
+            break;
+        }
+        else if(*(n->string_value.content+i)==ARGO_PERIOD){
+            decimalExists=1;
+            decimalStartPos=i;
+            val/=10;
+        }
+        else{
+            return -1;
+        }
+    }
+    if(!decimalExists){
+        val/=10;
+    }
+    int exponent=0;
+    if(exponentExists){
+        int exponentSign = 1;
+        if(*(n->string_value.content+exponentStartPos)==ARGO_MINUS){
+            exponentSign=-1;
+            exponentStartPos++;
+        }
+        else if(*(n->string_value.content+exponentStartPos)==ARGO_PLUS)
+            exponentStartPos++;
+        for(int i = exponentStartPos; i<n->string_value.length; i++){
+            if(argo_is_digit(*(n->string_value.content+i))){
+                exponent+=*(n->string_value.content+i) -48;
+                exponent*=10;
+            }
+            else{
+                return -1;
+            }
+        }
+        exponent/=10;
+        exponent*=exponentSign;
+    }
+    if(exponent>0){
+        for(int i=0; i<exponent;i++){
+            val*=10;
+        }
+    }
+    else{
+        for(int i=exponent; i< 0;i++){
+            val/=10;
+        }
+    }
+    if(numberStartPos)
+        val*=-1;
+    ungetc(1,f);
+    n->valid_string=1;
+    int a = val;
+    if(val!=a){
+        n->valid_float = 1;
+        n->valid_int = 0;
+        n->int_value = 0;
+        n->float_value = val;
+
+    }
+    else{
+        n->valid_int = 1;
+        n->valid_float = 1;
+        n->int_value = val;
+        n->float_value=n->int_value;
+    }
+    return 0;
+}
 
 /**
  * @brief  Write canonical JSON representing a specified value to
@@ -126,7 +512,8 @@ int argo_write_object(ARGO_OBJECT *o, FILE *f){
     fputc(ARGO_LBRACE,f);
     putSpaces(f);
     argo_write_value(o->member_list, f);
-    // fputc( ARGO_COMMA,f);
+    fputc( ARGO_COMMA,f);
+    putSpaces(f);
     ARGO_VALUE *currentMember = o->member_list->next;
     // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
     while(currentMember->next != o->member_list){
@@ -135,7 +522,8 @@ int argo_write_object(ARGO_OBJECT *o, FILE *f){
         fputc( ARGO_COMMA,f);
         putSpaces(f);
     }
-    argo_write_value(currentMember, f);
+    if(currentMember != currentMember->next)
+        argo_write_value(currentMember, f);
     // indent_level -= global_options & 0x000000FF;
     indent_level--;
     if(indent_level){
@@ -155,16 +543,18 @@ int argo_write_array(ARGO_ARRAY *a, FILE *f){
     fputc(ARGO_LBRACK,f);
     putSpaces(f);
     argo_write_value(a->element_list, f);
-    // fputc( ARGO_COMMA,f);
+    fputc( ARGO_COMMA,f);
+    putSpaces(f);
     ARGO_VALUE *currentMember = a->element_list->next;
     // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
     while(currentMember->next != a->element_list){
         argo_write_value(currentMember, f);
         currentMember = currentMember->next;
         fputc( ARGO_COMMA,f);
-    putSpaces(f);
+        putSpaces(f);
     }
-    argo_write_value(currentMember, f);
+    if(currentMember!=currentMember->next)
+        argo_write_value(currentMember, f);
     // indent_level -= global_options & 0x000000FF;
     indent_level--;
     
@@ -183,7 +573,7 @@ int argo_write_array(ARGO_ARRAY *a, FILE *f){
 
 
 int argo_write_value(ARGO_VALUE *v, FILE *f) { //TODO
-    int n;
+    int n=0;
     if(v->name.content){
         fputc(ARGO_QUOTE,f);
         n=argo_write_string(&v->name,f);
@@ -211,12 +601,10 @@ int argo_write_value(ARGO_VALUE *v, FILE *f) { //TODO
         break;
 
     case 2: //NUMBER CASE
-        // printf("PRINTING NUMBER");
         return argo_write_number(&v->content.number, f);
         break;
 
     case 3: //STRING CASE
-        // printf("PRINTING STRING");
         fputc(ARGO_QUOTE,f);
         int x = argo_write_string(&v->content.string, f);
         fputc(ARGO_QUOTE,f);
@@ -224,15 +612,11 @@ int argo_write_value(ARGO_VALUE *v, FILE *f) { //TODO
         break;
     
     case 4: //OBJECT CASE
-        // printf("PRINTING OBJECT");
-        // indent_level += global_options & 0x000000FF;
         indent_level++;
         return argo_write_object(&v->content.object,f)+n;
         break;
     
     case 5: //ARRAY CASE
-        // printf("PRINTING ARRAY");
-        // indent_level += global_options & 0x000000FF;
         indent_level++;
         return argo_write_array(&v->content.array, f)+n;
     default:
@@ -285,7 +669,7 @@ int fputHex(char c, FILE* f){
 }
 int argo_write_string(ARGO_STRING *s, FILE *f) {
     // TO BE IMPLEMENTED.
-    int x;
+    int x=0;
     for(int i = 0; i < s->length; i++){
         switch (*(s->content+i))
         {
@@ -322,7 +706,6 @@ int argo_write_string(ARGO_STRING *s, FILE *f) {
             else{
                 fputs("\\u",f);
                 x=fputHex(*(s->content+i),f);
-                // fprintf(f, "\\u%4.4x", *(s->content+i));  //TODO
             }
         }
     }
@@ -347,38 +730,10 @@ int argo_write_string(ARGO_STRING *s, FILE *f) {
  * @return  Zero if the operation is completely successful,
  * nonzero if there is any error.
  */
-static int printFloat(double d,FILE *f){
-    if(d){
-        if(d < 0){
-            fputc(ARGO_MINUS,f);
-            d/=-1;
-        }
-        int exponent = 0; 
-        while(d >= 1){
-            d /=10;
-            exponent+=1;
-        }
-        while(d < 0.1){
-            d*=10;
-            exponent -=1;
-        }
-        // d-=0.000000000001;
-        fprintf(f,"%.16f",d);          //TODO
-        if(exponent!=0){
-            fputc(ARGO_E,f);
-            fprintf(f,"%d",exponent);
-        }
-        return 0;
-    }
-    else{
-        fputc('0', f);
-        return 0;
-    }
-}
 static double strToFloat(ARGO_STRING *s){
     double val = 0;
     if(s->length==0){
-        return 0;
+        return -1;
     }
     int numberStartPos =0;
     if(*(s->content) == ARGO_MINUS){
@@ -414,7 +769,7 @@ static double strToFloat(ARGO_STRING *s){
             val/=10;
         }
         else{
-            return 0;
+            return -1;
         }
     }
     if(!decimalExists){
@@ -427,13 +782,15 @@ static double strToFloat(ARGO_STRING *s){
             exponentSign=-1;
             exponentStartPos++;
         }
+        else if(*(s->content+exponentStartPos)==ARGO_PLUS)
+            exponentStartPos++;
         for(int i = exponentStartPos; i<s->length; i++){
             if(argo_is_digit(*(s->content+i))){
                 exponent+=*(s->content+i) -48;
                 exponent*=10;
             }
             else{
-                return 0;
+                return -1;
             }
         }
         exponent/=10;
@@ -454,6 +811,35 @@ static double strToFloat(ARGO_STRING *s){
     else
         return val;
 }
+static int printFloat(double d,FILE *f){
+    if(d){
+        if(d < 0){
+            fputc(ARGO_MINUS,f);
+            d/=-1;
+        }
+        int exponent = 0; 
+        while(d >= 1){
+            d /=10;
+            exponent+=1;
+        }
+        while(d < 0.1){
+            d*=10;
+            exponent -=1;
+        }
+        // d-=0.000000000001;
+        fprintf(f,"%.16f",d);          //TODO
+        if(exponent!=0){
+            fputc(ARGO_E,f);
+            fprintf(f,"%d",exponent);
+        }
+        return 0;
+    }
+    else{
+        fputc('0', f);
+        return 0;
+    }
+}
+
 int argo_write_number(ARGO_NUMBER *n, FILE *f) {
     // TO BE IMPLEMENTED.
     if(n->valid_int && n->valid_float && n->int_value != n->float_value){
@@ -461,13 +847,11 @@ int argo_write_number(ARGO_NUMBER *n, FILE *f) {
     }
     if(n->valid_int && n->valid_string ){
         if(n->int_value != strToFloat(&n->string_value)){
-            printf("String(%.16f)didnt match int(%ld)",strToFloat(&n->string_value), n->int_value);
             return -1;
             }
     }
     if(n->valid_string && n->valid_float ){
         if(strToFloat(&n->string_value) > (n->float_value+0.000000000000001) || strToFloat(&n->string_value ) < (n->float_value-0.000000000000001)){
-             printf("String(%.16f)didnt match float(%.16f)",strToFloat(&n->string_value), n->float_value);
             return -1;
             }
     }

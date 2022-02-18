@@ -154,12 +154,18 @@ int main(int argc, char **argv)
 
     else if(global_options == VALIDATE_OPTION){
         ARGO_VALUE* argo_value = argo_read_value(stdin);  
-        argo_write_value(argo_value, stdout);
+        if(!argo_value)
+            fputs("ERROR Reading", stderr);
+        else
+            argo_write_value(argo_value, stdout);
         // printf("\nWERE VALIDATING\n");
     }
     else if(global_options >= CANONICALIZE_OPTION){
         ARGO_VALUE* argo_value = argo_read_value(stdin);  
-        argo_write_value(argo_value, stdout);
+        if(!argo_value)
+            fputs("ERROR Reading\n", stderr);
+        else
+            argo_write_value(argo_value, stdout);
         // printf("\nWERE CANONICALIZING\n");
     }
     // fprintf(stdout,"%x\n", global_options);
