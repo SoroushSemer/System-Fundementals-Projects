@@ -26,32 +26,29 @@
  * @return  A valid pointer if the operation is completely successful,
  * NULL if there is any error.
  */
-int argo_read_object(ARGO_OBJECT *o, FILE *f){
+char getNoWhitespace(FILE *f){
     char c = fgetc(f);
+    while(argo_is_whitespace(c)){
+        c = fgetc(f);
+    }
     if(c == EOF)
         return -1;
+    return c;
+}
+
+int argo_read_object(ARGO_OBJECT *o, FILE *f){
+    char c = getNoWhitespace(f);
     ARGO_VALUE *prev = NULL;
     ARGO_VALUE *head = NULL;
     ARGO_VALUE *v;
     while(c != ARGO_RBRACE){
-        if(argo_is_whitespace(c)){
-            c=fgetc(f);
-            continue;
-        }
         if(c!= ARGO_QUOTE)
             return -1;
         ARGO_STRING name;
         int success = argo_read_string(&name, f);
         if(success)
             return -1;
-        c=fgetc(f); //get colon
-        if(argo_is_whitespace(c))
-            c=fgetc(f);
-        if(argo_is_whitespace(c)){
-            while(argo_is_whitespace(c))
-                c = fgetc(f);
-            ungetc(c,f);
-        }
+        c=getNoWhitespace(f);
         v=argo_read_value(f);
         if(!v)
             return -1;
@@ -70,8 +67,8 @@ int argo_read_object(ARGO_OBJECT *o, FILE *f){
             c=fgetc(f); // get rid of comma
             ungetc(c,f); // get rid of comma
         }
-        while(argo_is_whitespace(c))
-            c=fgetc(f);
+        if(c!= ARGO_RBRACE)
+            c=getNoWhitespace(f);
         if(c==ARGO_COMMA){
             c=fgetc(f); // get rid of comma
         }
@@ -79,28 +76,27 @@ int argo_read_object(ARGO_OBJECT *o, FILE *f){
             return -1;
     }
     if(head){
-        v->next = head;
-        head->prev = v;
-        o->member_list = head;
+        
+        (argo_value_storage+argo_next_value)->type = ARGO_NO_TYPE;
+        (argo_value_storage+argo_next_value)->next = head;
+        (argo_value_storage+argo_next_value)->prev = v;
+
+        v->next = (argo_value_storage+argo_next_value);
+        head->prev = (argo_value_storage+argo_next_value);
+        o->member_list =(argo_value_storage+argo_next_value);
+        argo_next_value++;
     }
     else
         o->member_list = NULL;
-    fgetc(f);
     return 0;
 }
 int argo_read_array(ARGO_ARRAY *a, FILE *f){
-    char c = fgetc(f);
-    if(c == EOF)
-        return -1;
+    char c = getNoWhitespace(f);
     ARGO_VALUE *prev = NULL;
     ARGO_VALUE *head = NULL;
     ARGO_VALUE *v;
     int success;
     while(c != ARGO_RBRACK){
-        if(argo_is_whitespace(c)){
-            c=fgetc(f);
-            continue;
-        }
         ungetc(c,f);
         v=argo_read_value(f);
         if(!v)
@@ -120,8 +116,8 @@ int argo_read_array(ARGO_ARRAY *a, FILE *f){
             c=fgetc(f); // get rid of comma
             ungetc(c,f); // get rid of comma
         }
-        while(argo_is_whitespace(c))
-            c=fgetc(f);
+        if(c!= ARGO_RBRACK)
+            c=getNoWhitespace(f);
         if(c==ARGO_COMMA){
             c=fgetc(f); // get rid of comma
         }
@@ -129,13 +125,20 @@ int argo_read_array(ARGO_ARRAY *a, FILE *f){
             return -1;
     }
     if(head){
-        v->next = head;
-        head->prev = v;
-        a->element_list = head;
+        // v->next = head;
+        // head->prev = v;
+        // a->element_list = head;
+        (argo_value_storage+argo_next_value)->type = ARGO_NO_TYPE;
+        (argo_value_storage+argo_next_value)->next = head;
+        (argo_value_storage+argo_next_value)->prev = v;
+
+        v->next = (argo_value_storage+argo_next_value);
+        head->prev = (argo_value_storage+argo_next_value);
+        a->element_list =(argo_value_storage+argo_next_value);
+        argo_next_value++;
     }
     else
         a->element_list = NULL;
-    fgetc(f);
     return 0;
 }
 
@@ -143,9 +146,7 @@ ARGO_VALUE *argo_read_value(FILE *f) {
     ARGO_VALUE v;
     v.name.content = NULL;
     int success=-1;
-    char c = fgetc(f);
-     while(argo_is_whitespace(c))
-        c = fgetc(f);
+    char c = getNoWhitespace(f);
     switch(c){
         case ARGO_T: 
             for(int i =0; i < 4;i++){
@@ -189,12 +190,10 @@ ARGO_VALUE *argo_read_value(FILE *f) {
         case ARGO_LBRACK: //ARRAY CASE
             v.type = ARGO_ARRAY_TYPE;
             success = argo_read_array(&v.content.array,f);
-            c = fgetc(f);
             break;
         case ARGO_LBRACE: //OBJECT CASE
             v.type = ARGO_OBJECT_TYPE;
             success = argo_read_object(&v.content.object,f);
-            c = fgetc(f);
             break;
         default:
             if(argo_is_digit(c) || c == ARGO_MINUS){
@@ -205,11 +204,6 @@ ARGO_VALUE *argo_read_value(FILE *f) {
             }
             else
                 return NULL;
-    }
-    if(argo_is_whitespace(c)){
-        while(argo_is_whitespace(c))
-            c = fgetc(f);
-        ungetc(c,f);
     }
     if(!success){
         ARGO_VALUE *a = (argo_value_storage+argo_next_value);
@@ -510,63 +504,87 @@ static int putSpaces(FILE* f){
 
 int argo_write_object(ARGO_OBJECT *o, FILE *f){
     fputc(ARGO_LBRACE,f);
-    putSpaces(f);
-    argo_write_value(o->member_list, f);
-    fputc( ARGO_COMMA,f);
-    putSpaces(f);
-    ARGO_VALUE *currentMember = o->member_list->next;
-    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
-    while(currentMember->next != o->member_list){
-        argo_write_value(currentMember, f);
-        currentMember = currentMember->next;
-        fputc( ARGO_COMMA,f);
+    if(global_options & 0x000000FF)
         putSpaces(f);
+    argo_write_value(o->member_list->next, f);
+    if(o->member_list->next->next != o->member_list){
+        fputc( ARGO_COMMA,f);
+        if(global_options & 0x000000FF)
+            putSpaces(f);
     }
-    if(currentMember != currentMember->next)
+    ARGO_VALUE *currentMember = o->member_list;
+    currentMember = currentMember->next;
+    currentMember = currentMember->next;
+    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+    if(currentMember != o->member_list)
+        while(currentMember->next != o->member_list){
+            argo_write_value(currentMember, f);
+            currentMember = currentMember->next;
+            fputc( ARGO_COMMA,f);
+            if(global_options & 0x000000FF)
+                putSpaces(f);
+        }
+    if(o->member_list->next->next != o->member_list)
         argo_write_value(currentMember, f);
     // indent_level -= global_options & 0x000000FF;
-    indent_level--;
-    if(indent_level){
-        putSpaces(f);
-        fputc( ARGO_RBRACE,f);
+    if(global_options & 0x000000FF){
+        indent_level--;
+        if(indent_level){
+            putSpaces(f);
+            fputc( ARGO_RBRACE,f);
+        }
+        else{
+            fputc(ARGO_LF,f);
+            fputc( ARGO_RBRACE,f);
+            fputc(ARGO_LF,f);
+            
+        }
     }
     else{
-        fputc(ARGO_LF,f);
         fputc( ARGO_RBRACE,f);
-        fputc(ARGO_LF,f);
-        
     }
     return 0;
 }
 
 int argo_write_array(ARGO_ARRAY *a, FILE *f){
     fputc(ARGO_LBRACK,f);
-    putSpaces(f);
-    argo_write_value(a->element_list, f);
-    fputc( ARGO_COMMA,f);
-    putSpaces(f);
-    ARGO_VALUE *currentMember = a->element_list->next;
-    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
-    while(currentMember->next != a->element_list){
-        argo_write_value(currentMember, f);
-        currentMember = currentMember->next;
-        fputc( ARGO_COMMA,f);
+    if(global_options & 0x000000FF)
         putSpaces(f);
+    argo_write_value(a->element_list->next, f);
+    if(a->element_list->next->next != a->element_list){
+        fputc( ARGO_COMMA,f);
+        if(global_options & 0x000000FF)
+            putSpaces(f);
     }
-    if(currentMember!=currentMember->next)
+    ARGO_VALUE *currentMember = a->element_list;
+    currentMember = currentMember->next;
+    currentMember = currentMember->next;
+    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+    if(currentMember != a->element_list)
+        while(currentMember->next != a->element_list){
+            argo_write_value(currentMember, f);
+            currentMember = currentMember->next;
+            fputc( ARGO_COMMA,f);
+            if(global_options & 0x000000FF)
+                putSpaces(f);
+        }
+    if(a->element_list->next->next != a->element_list)
         argo_write_value(currentMember, f);
     // indent_level -= global_options & 0x000000FF;
-    indent_level--;
-    
-    if(indent_level){
-        putSpaces(f);
-        fputc( ARGO_RBRACK,f);
+    if(global_options & 0x000000FF){
+        indent_level--;
+        if(indent_level){
+            putSpaces(f);
+            fputc( ARGO_RBRACK,f);
+        }
+        else{
+            fputc(ARGO_LF,f);
+            fputc( ARGO_RBRACK,f);
+            fputc(ARGO_LF,f);
+        }
     }
     else{
-        fputc(ARGO_LF,f);
         fputc( ARGO_RBRACK,f);
-        fputc(ARGO_LF,f);
-        
     }
     return 0;
 }
@@ -855,7 +873,11 @@ int argo_write_number(ARGO_NUMBER *n, FILE *f) {
             return -1;
             }
     }
-    if(n->valid_int){
+    if(n->valid_float && !n->valid_int && n->float_value==0){
+        fputs("0.0",f);
+        return 0;
+    }
+    else if(n->valid_int){
         fprintf(f, "%ld",n->int_value);
         return 0;
     }
