@@ -26,7 +26,7 @@ static int strEquals(char *s1, char *s2){
             return 0;
         i++;
     }
-    return 1;
+    return -1;
 }
 static int strToInt(char *s){
     int i = 0;

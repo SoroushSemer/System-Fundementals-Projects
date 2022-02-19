@@ -49,6 +49,8 @@ int argo_read_object(ARGO_OBJECT *o, FILE *f){
         if(success)
             return -1;
         c=getNoWhitespace(f);
+        if(c!=ARGO_COLON)
+            return -1;
         v=argo_read_value(f);
         if(!v)
             return -1;
@@ -63,14 +65,21 @@ int argo_read_object(ARGO_OBJECT *o, FILE *f){
          prev = v;
 
         c=fgetc(f); // get rid of comma
+        ungetc(c,f); // get rid of comma
+        c=fgetc(f); // get rid of comma
+        int comma = 1;
         if(c==1){
             c=fgetc(f); // get rid of comma
             ungetc(c,f); // get rid of comma
+            comma = 0;
         }
-        if(c!= ARGO_RBRACE)
+        if(c!= ARGO_RBRACE && c!=ARGO_COMMA){
             c=getNoWhitespace(f);
+            if(c!= ARGO_RBRACE && c!=ARGO_COMMA && comma)
+                return -1;
+       }
         if(c==ARGO_COMMA){
-            c=fgetc(f); // get rid of comma
+            c=getNoWhitespace(f); // get rid of comma
         }
         if(c==EOF)
             return -1;
@@ -86,8 +95,13 @@ int argo_read_object(ARGO_OBJECT *o, FILE *f){
         o->member_list =(argo_value_storage+argo_next_value);
         argo_next_value++;
     }
-    else
-        o->member_list = NULL;
+    else{
+        (argo_value_storage+argo_next_value)->type = ARGO_NO_TYPE;
+        (argo_value_storage+argo_next_value)->next = (argo_value_storage+argo_next_value);
+        (argo_value_storage+argo_next_value)->prev = (argo_value_storage+argo_next_value);
+        o->member_list = (argo_value_storage+argo_next_value);
+        argo_next_value++;
+    }
     return 0;
 }
 int argo_read_array(ARGO_ARRAY *a, FILE *f){
@@ -111,15 +125,21 @@ int argo_read_array(ARGO_ARRAY *a, FILE *f){
          prev = v;
         
         c=fgetc(f); // get rid of comma
-        
+        ungetc(c,f); // get rid of comma
+        c=fgetc(f); // get rid of comma
+        int comma = 1;
         if(c==1){
             c=fgetc(f); // get rid of comma
             ungetc(c,f); // get rid of comma
+            comma = 0;
         }
-        if(c!= ARGO_RBRACK)
+        if(c!= ARGO_COMMA && c!= ARGO_RBRACK){
             c=getNoWhitespace(f);
+            if(c!= ARGO_COMMA && c!= ARGO_RBRACK && comma)
+                return -1;
+        }
         if(c==ARGO_COMMA){
-            c=fgetc(f); // get rid of comma
+            c=getNoWhitespace(f); // get rid of comma
         }
         if(c==EOF)
             return -1;
@@ -137,8 +157,13 @@ int argo_read_array(ARGO_ARRAY *a, FILE *f){
         a->element_list =(argo_value_storage+argo_next_value);
         argo_next_value++;
     }
-    else
-        a->element_list = NULL;
+    else{
+        (argo_value_storage+argo_next_value)->type = ARGO_NO_TYPE;
+        (argo_value_storage+argo_next_value)->next = (argo_value_storage+argo_next_value);
+        (argo_value_storage+argo_next_value)->prev = (argo_value_storage+argo_next_value);
+        a->element_list = (argo_value_storage+argo_next_value);
+        argo_next_value++;
+    }
     return 0;
 }
 
@@ -445,8 +470,9 @@ int argo_read_number(ARGO_NUMBER *n, FILE *f) {
         val*=-1;
     ungetc(1,f);
     n->valid_string=1;
-    int a = val;
-    if(val!=a){
+    
+    long a = val;
+    if(decimalExists || a != val){
         n->valid_float = 1;
         n->valid_int = 0;
         n->int_value = 0;
@@ -484,7 +510,7 @@ static int argo_str_equal(ARGO_STRING *s1, ARGO_STRING *s2){
             return 0;
         }
     }
-    return 1;
+    return -1;
 }
 static int putSpaces(FILE* f){
     if(!indent_level){
@@ -504,86 +530,108 @@ static int putSpaces(FILE* f){
 
 int argo_write_object(ARGO_OBJECT *o, FILE *f){
     fputc(ARGO_LBRACE,f);
-    if(global_options & 0x000000FF)
-        putSpaces(f);
-    argo_write_value(o->member_list->next, f);
-    if(o->member_list->next->next != o->member_list){
-        fputc( ARGO_COMMA,f);
+    if(o->member_list->next != o->member_list){
         if(global_options & 0x000000FF)
             putSpaces(f);
-    }
-    ARGO_VALUE *currentMember = o->member_list;
-    currentMember = currentMember->next;
-    currentMember = currentMember->next;
-    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
-    if(currentMember != o->member_list)
-        while(currentMember->next != o->member_list){
-            argo_write_value(currentMember, f);
-            currentMember = currentMember->next;
+        argo_write_value(o->member_list->next, f);
+        if(o->member_list->next->next != o->member_list){
             fputc( ARGO_COMMA,f);
             if(global_options & 0x000000FF)
                 putSpaces(f);
         }
-    if(o->member_list->next->next != o->member_list)
-        argo_write_value(currentMember, f);
-    // indent_level -= global_options & 0x000000FF;
-    if(global_options & 0x000000FF){
-        indent_level--;
-        if(indent_level){
-            putSpaces(f);
-            fputc( ARGO_RBRACE,f);
+        ARGO_VALUE *currentMember = o->member_list;
+        currentMember = currentMember->next;
+        currentMember = currentMember->next;
+        // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+        if(currentMember != o->member_list)
+            while(currentMember->next != o->member_list){
+                argo_write_value(currentMember, f);
+                currentMember = currentMember->next;
+                fputc( ARGO_COMMA,f);
+                if(global_options & 0x000000FF)
+                    putSpaces(f);
+            }
+        if(o->member_list->next->next != o->member_list)
+            argo_write_value(currentMember, f);
+    
+        // indent_level -= global_options & 0x000000FF;
+        if(global_options & 0x000000FF){
+            indent_level--;
+            if(indent_level){
+                putSpaces(f);
+                fputc( ARGO_RBRACE,f);
+            }
+            else{
+                fputc(ARGO_LF,f);
+                fputc( ARGO_RBRACE,f);
+                fputc(ARGO_LF,f);
+                
+            }
         }
         else{
-            fputc(ARGO_LF,f);
             fputc( ARGO_RBRACE,f);
-            fputc(ARGO_LF,f);
-            
         }
     }
     else{
-        fputc( ARGO_RBRACE,f);
+        if(indent_level!=1)
+            putSpaces(f);
+        else
+            fputc(ARGO_LF, f);
+        indent_level--;
+        fputc(ARGO_RBRACE,f);
     }
     return 0;
 }
 
 int argo_write_array(ARGO_ARRAY *a, FILE *f){
     fputc(ARGO_LBRACK,f);
-    if(global_options & 0x000000FF)
-        putSpaces(f);
-    argo_write_value(a->element_list->next, f);
-    if(a->element_list->next->next != a->element_list){
-        fputc( ARGO_COMMA,f);
+    
+    if(a->element_list->next != a->element_list){
         if(global_options & 0x000000FF)
-            putSpaces(f);
-    }
-    ARGO_VALUE *currentMember = a->element_list;
-    currentMember = currentMember->next;
-    currentMember = currentMember->next;
-    // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
-    if(currentMember != a->element_list)
-        while(currentMember->next != a->element_list){
-            argo_write_value(currentMember, f);
-            currentMember = currentMember->next;
+        putSpaces(f);
+        argo_write_value(a->element_list->next, f);
+        if(a->element_list->next->next != a->element_list){
             fputc( ARGO_COMMA,f);
             if(global_options & 0x000000FF)
                 putSpaces(f);
         }
-    if(a->element_list->next->next != a->element_list)
-        argo_write_value(currentMember, f);
-    // indent_level -= global_options & 0x000000FF;
-    if(global_options & 0x000000FF){
-        indent_level--;
-        if(indent_level){
-            putSpaces(f);
-            fputc( ARGO_RBRACK,f);
+        ARGO_VALUE *currentMember = a->element_list;
+        currentMember = currentMember->next;
+        currentMember = currentMember->next;
+        // while(!argo_str_equal(&currentMember->name,&o->member_list->name)){
+        if(currentMember != a->element_list)
+            while(currentMember->next != a->element_list){
+                argo_write_value(currentMember, f);
+                currentMember = currentMember->next;
+                fputc( ARGO_COMMA,f);
+                if(global_options & 0x000000FF)
+                    putSpaces(f);
+            }
+        if(a->element_list->next->next != a->element_list)
+            argo_write_value(currentMember, f);
+        // indent_level -= global_options & 0x000000FF;
+        if(global_options & 0x000000FF){
+            indent_level--;
+            if(indent_level){
+                putSpaces(f);
+                fputc( ARGO_RBRACK,f);
+            }
+            else{
+                fputc(ARGO_LF,f);
+                fputc( ARGO_RBRACK,f);
+                fputc(ARGO_LF,f);
+            }
         }
         else{
-            fputc(ARGO_LF,f);
             fputc( ARGO_RBRACK,f);
-            fputc(ARGO_LF,f);
         }
     }
     else{
+        if(indent_level!=1)
+            putSpaces(f);
+        else
+            fputc(ARGO_LF, f);
+        indent_level--;
         fputc( ARGO_RBRACK,f);
     }
     return 0;
@@ -877,12 +925,12 @@ int argo_write_number(ARGO_NUMBER *n, FILE *f) {
         fputs("0.0",f);
         return 0;
     }
-    else if(n->valid_int){
+    else if(n->valid_float && !n->valid_int){
+        return printFloat(n->float_value, f);;
+    }
+    else if(n->valid_int ){
         fprintf(f, "%ld",n->int_value);
         return 0;
-    }
-    else if(n->valid_float){
-        return printFloat(n->float_value, f);;
     }
     else if(n->valid_string){
         return printFloat(strToFloat(&n->string_value),f);
