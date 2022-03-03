@@ -272,10 +272,10 @@ void getoption(int argc,
                   {"prefix", required_argument, 0,  'p' },
                   {"suffix", required_argument, 0,  's' },
                   {"hang", required_argument, 0, 'h' },
-                  {"", 0, 0, 'l'},
+                  {"", required_argument, 0, 'l'},
                   {"last", 0, 0, 1},
                   {"no-last",0,0,2},
-                  {"", 0, 0, 'm' },
+                  {"", required_argument, 0, 'm' },
                   {"min", 0, 0, 3 },
                   {"no-min", 0, 0, 4 },
                   {"version", 0, 0, 0 },
@@ -288,7 +288,7 @@ void getoption(int argc,
     }
     switch(option_char){
       case 0:
-        printf("VERSION: %s\n", version);
+        sprintf(errmsg, "%s %s\n", progname, version);
         break;
       case 'w':
         *pwidth = n;
@@ -337,13 +337,26 @@ int original_main(int argc, char *argv[])
 
   parinit = getenv("PARINIT");
   if (parinit) {
-  //   picopy = calloc((strlen(parinit) + 1), sizeof (char));
-  //   if (!picopy) {
-  //     strcpy(errmsg,outofmem);
-  //     goto parcleanup;
-  //   }
-  //   strcpy(picopy,parinit);
-  //   opt = strtok(picopy,whitechars);
+     picopy = calloc((strlen(parinit) + 1), sizeof (char));
+     if (!picopy) {
+       strcpy(errmsg,outofmem);
+       goto parcleanup;
+     }
+     strcpy(picopy,parinit);
+     size_t arglen;
+     for(arglen=0, opt = strtok(picopy, whitechars); 
+          opt; arglen++, opt = strtok(picopy,whitechars));
+     char **optarr = calloc(arglen, sizeof(*optarr));
+     strcpy(picopy,parinit);
+     opt = strtok(picopy,whitechars);
+     for(int i=0; opt!=NULL; i++){
+          optarr[i] = opt;
+          opt = strtok(picopy,whitechars);
+      }
+      getoption(arglen, optarr, &widthbak,&prefixbak,&suffixbak,&hangbak,&lastbak,&minbak);
+      if(*errmsg) goto parcleanup;
+  }
+
   //   while (opt) {
   //     parseopt(opt, &widthbak, &prefixbak,
   //              &suffixbak, &hangbak, &lastbak, &minbak);
@@ -358,7 +371,7 @@ int original_main(int argc, char *argv[])
   //   parseopt(*argv, &widthbak, &prefixbak,
   //            &suffixbak, &hangbak, &lastbak, &minbak);
   //   if (*errmsg) goto parcleanup;
- }
+  //  }
   getoption(argc, argv, &widthbak,&prefixbak,&suffixbak,&hangbak,&lastbak,&minbak);
   if(*errmsg) goto parcleanup;
   for (;;) {
