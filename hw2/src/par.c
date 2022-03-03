@@ -16,6 +16,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #undef NULL
 #define NULL ((void *) 0)
@@ -187,6 +188,7 @@ rlcleanup:
         if (!lines) break;
         free(*lines);
       }
+    freebuffer(pbuf);
   }
 
   return lines;
@@ -212,7 +214,7 @@ static void setdefaults(
   for (line = inlines;  *line;  ++line);
   numlines = line - inlines;
 
-  if (*pprefix < 0)
+  if (*pprefix < 0){
     if (numlines <= *phang + 1)
       *pprefix = 0;
     else {
@@ -220,27 +222,31 @@ static void setdefaults(
       for (end = start;  *end;  ++end);
       for (line = inlines + *phang + 1;  *line;  ++line) {
         for (p1 = start, p2 = *line;  p1 < end && *p1 == *p2;  ++p1, ++p2);
+       
         end = p1;
       }
       *pprefix = end - start;
     }
-
-  if (*psuffix < 0)
+  }
+  if (*psuffix < 0){
     if (numlines <= 1)
       *psuffix = 0;
     else {
       start = *inlines;
       for (end = start;  *end;  ++end);
       for (line = inlines + 1;  *line;  ++line) {
-        for (p2 = *line;  *p2;  ++p2)
+        for (p2 = *line;  *p2;  ++p2);
         for (p1 = end;
-             p1 > start && p2 > *line && p1[-1] == p2[-1];
+             p1 > start && p2 > *line && p1[0] == p2[0];
              --p1, --p2);
-        start = p1;
+        if(p1[0]!=p2[0])
+          p1++;
+        start=p1;
       }
       while (end - start >= 2 && isspace(*start) && isspace(start[1])) ++start;
       *psuffix = end - start;
     }
+  }
 }
 
 
@@ -248,16 +254,80 @@ static void freelines(char **lines)
 /* Frees the strings pointed to in the NULL-terminated array lines, then */
 /* frees the array. Does not use errmsg because it always succeeds.      */
 {
-  char *line;
+  char **line;
+  char **original_lines = lines;
+  for (line = lines; *line; line = ++lines )
+    free(*line);
 
-  for (line = *lines;  *line;  ++line)
-    free(line);
-
-  free(lines);
+   free(original_lines);
 }
 
-
-main(int argc, const char * const *argv)
+void getoption(int argc,
+  char *argv[], int *pwidth, int *pprefix,
+  int *psuffix, int *phang, int *plast, int *pmin){
+  int option_char =0;
+  int option_index = 0;
+  static struct option long_options[] = {
+                  {"width", required_argument, 0,  'w' },
+                  {"prefix", required_argument, 0,  'p' },
+                  {"suffix", required_argument, 0,  's' },
+                  {"hang", required_argument, 0, 'h' },
+                  {"", 0, 0, 'l'},
+                  {"last", 0, 0, 1},
+                  {"no-last",0,0,2},
+                  {"", 0, 0, 'm' },
+                  {"min", 0, 0, 3 },
+                  {"no-min", 0, 0, 4 },
+                  {"version", 0, 0, 0 },
+                  {0, 0, 0,  0 }
+              };
+  while((option_char = getopt_long(argc, argv, "w:p:s:h:l:m:",long_options,&option_index)) != EOF){
+    int n = 1;
+    if(optarg){
+      strtoudec(optarg, &n);
+    }
+    switch(option_char){
+      case 0:
+        printf("VERSION: %s\n", version);
+        break;
+      case 'w':
+        *pwidth = n;
+        break;
+      case 'p':
+        *pprefix =  n;
+        break;
+      case 's':
+        *psuffix =  n;
+        break;
+      case 'h':
+        *phang =  n;
+        break;
+      case 'l':
+        *plast = n;
+        break;
+      case 1:
+        *plast = 1;
+        break;
+      case 2:
+        *plast = 0;
+        break;
+      case 'm':
+        *pmin =  n;
+        break;
+      case 3:
+        *pmin = 1;
+        break;
+      case 4:
+        *pmin = 0;
+        break;
+      default:
+        sprintf(errmsg, "Bad Option: '%s'\n",argv[optind-1]);
+        break;
+    }
+  }
+  // printf("w%d p%d s%d h%d l%d m%d\n", *pwidth,*pprefix,*psuffix,*phang,*plast,*pmin);
+}
+int original_main(int argc, char *argv[])
 {
   int width, widthbak = -1, prefix, prefixbak = -1, suffix, suffixbak = -1,
       hang, hangbak = -1, last, lastbak = -1, min, minbak = -1, c;
@@ -267,38 +337,42 @@ main(int argc, const char * const *argv)
 
   parinit = getenv("PARINIT");
   if (parinit) {
-    picopy = malloc((strlen(parinit) + 1) * sizeof (char));
-    if (!picopy) {
-      strcpy(errmsg,outofmem);
-      goto parcleanup;
-    }
-    strcpy(picopy,parinit);
-    opt = strtok(picopy,whitechars);
-    while (opt) {
-      parseopt(opt, &widthbak, &prefixbak,
-               &suffixbak, &hangbak, &lastbak, &minbak);
-      if (*errmsg) goto parcleanup;
-      opt = strtok(NULL,whitechars);
-    }
-    free(picopy);
-    picopy = NULL;
-  }
+  //   picopy = calloc((strlen(parinit) + 1), sizeof (char));
+  //   if (!picopy) {
+  //     strcpy(errmsg,outofmem);
+  //     goto parcleanup;
+  //   }
+  //   strcpy(picopy,parinit);
+  //   opt = strtok(picopy,whitechars);
+  //   while (opt) {
+  //     parseopt(opt, &widthbak, &prefixbak,
+  //              &suffixbak, &hangbak, &lastbak, &minbak);
+  //     if (*errmsg) goto parcleanup;
+  //     opt = strtok(NULL,whitechars);
+  //   }
+  //   free(picopy);
+  //   picopy = NULL;
+  // }
 
-  while (*++argv) {
-    parseopt(*argv, &widthbak, &prefixbak,
-             &suffixbak, &hangbak, &lastbak, &minbak);
-    if (*errmsg) goto parcleanup;
-  }
-
+  // while (*++argv) {
+  //   parseopt(*argv, &widthbak, &prefixbak,
+  //            &suffixbak, &hangbak, &lastbak, &minbak);
+  //   if (*errmsg) goto parcleanup;
+ }
+  getoption(argc, argv, &widthbak,&prefixbak,&suffixbak,&hangbak,&lastbak,&minbak);
+  if(*errmsg) goto parcleanup;
   for (;;) {
     for (;;) {
       c = getchar();
-      if (c != '\n') break;
+      if (c != '\n' || c == EOF) break;
       putchar(c);
     }
+    if(c == EOF)
+      break;
     ungetc(c,stdin);
 
     inlines = readlines();
+    
     if (*errmsg) goto parcleanup;
     if (!*inlines) {
       free(inlines);
@@ -330,7 +404,6 @@ parcleanup:
   if (picopy) free(picopy);
   if (inlines) freelines(inlines);
   if (outlines) freelines(outlines);
-
   if (*errmsg) {
     fprintf(stderr, "%.163s", errmsg);
     exit(EXIT_FAILURE);

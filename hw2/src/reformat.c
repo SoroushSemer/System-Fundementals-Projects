@@ -13,6 +13,7 @@
 #include "errmsg.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <ctype.h>
 #include <string.h>
 
@@ -158,12 +159,12 @@ char **reformat(const char * const *inlines, int width,
 {
   int numin, numout, affix, L, linelen, newL;
   const char * const *line, **suffixes = NULL, **suf, *end, *p1, *p2;
-  char *q1, *q2, **outlines;
+  char *q1, *q2, **outlines=NULL;
   struct word dummy, *head, *tail, *w1, *w2;
   struct buffer *pbuf = NULL;
 
 /* Initialization: */
-
+  
   *errmsg = '\0';
   dummy.next = dummy.prev = NULL;
   head = tail = &dummy;
@@ -176,7 +177,7 @@ char **reformat(const char * const *inlines, int width,
 /* Allocate space for pointers to the suffixes: */
 
   if (numin) {
-    suffixes = malloc(numin * sizeof (const char *));
+    suffixes = calloc(numin, sizeof (const char *));
     if (!suffixes) {
       strcpy(errmsg,outofmem);
       goto rfcleanup;
@@ -192,7 +193,7 @@ char **reformat(const char * const *inlines, int width,
     for (end = *line;  *end;  ++end);
     if (end - *line < affix) {
       sprintf(errmsg,
-              "Line %d shorter than <prefix> + <suffix> = %d + %d = %d\n",
+              "Line %ld shorter than <prefix> + <suffix> = %d + %d = %d\n",
               line - inlines + 1, prefix, suffix, affix);
       goto rfcleanup;
     }
@@ -205,7 +206,7 @@ char **reformat(const char * const *inlines, int width,
       p2 = p1;
       while (p2 < end && !isspace(*p2)) ++p2;
       if (p2 - p1 > L) p2 = p1 + L;
-      w1 = malloc(sizeof (struct word));
+      w1 = calloc(1,sizeof (struct word));
       if (!w1) {
         strcpy(errmsg,outofmem);
         goto rfcleanup;
@@ -247,7 +248,7 @@ char **reformat(const char * const *inlines, int width,
     linelen = suffix ? newL + affix :
                   w1 ? w1->linelen + prefix :
                        prefix;
-    q1 = malloc((linelen + 1) * sizeof (char));
+    q1 = calloc((linelen + 1), sizeof (char));
     if (!q1) {
       strcpy(errmsg,outofmem);
       goto rfcleanup;
