@@ -223,9 +223,18 @@ char **reformat(const char *const *inlines, int width,
       ;
     if (end - *line < affix)
     {
-      snprintf(str, 200, "Line %ld shorter than <prefix> + <suffix> = %d + %d = %d\n",
-               line - inlines + 1, prefix, suffix, affix);
-      set_error(str);
+      FILE *f;
+      char *s;
+      size_t x;
+      f = open_memstream(&s, &x);
+      fprintf(f, "Line %ld shorter than <prefix> + <suffix> = %d + %d = %d\n",
+              line - inlines + 1, prefix, suffix, affix);
+      fflush(f);
+      fclose(f);
+      set_error(s);
+      // snprintf(str, 200, "Line %ld shorter than <prefix> + <suffix> = %d + %d = %d\n",
+      //          line - inlines + 1, prefix, suffix, affix);
+      // set_error(str);
       // sprintf(errmsg,
       //         "Line %ld shorter than <prefix> + <suffix> = %d + %d = %d\n",
       //         line - inlines + 1, prefix, suffix, affix);

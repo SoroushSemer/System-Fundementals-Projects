@@ -306,7 +306,29 @@ static void freelines(char **lines)
 
   free(original_lines);
 }
-
+void bad_option_int(int n)
+{
+  char *s;
+  size_t x;
+  FILE *f = open_memstream(&s, &x);
+  fprintf(f, "Bad Option: '%d'\n", n);
+  fflush(f);
+  fclose(f);
+  set_error(s);
+  return;
+}
+void bad_option_str(char *c)
+{
+  FILE *f;
+  char *s;
+  size_t x;
+  f = open_memstream(&s, &x);
+  fprintf(f, "Bad Option: '%s'\n", c);
+  fflush(f);
+  fclose(f);
+  set_error(s);
+  return;
+}
 void getoption(int argc,
                char *argv[], int *pwidth, int *pprefix,
                int *psuffix, int *phang, int *plast, int *pmin)
@@ -319,26 +341,25 @@ void getoption(int argc,
       {"width", required_argument, 0, 'w'},
       {"prefix", required_argument, 0, 'p'},
       {"suffix", required_argument, 0, 's'},
-      {"hang", no_argument, 0, 'h'},
-      {"", required_argument, 0, 'l'},
+      {"hang", optional_argument, 0, 'h'},
+      {"", optional_argument, 0, 'l'},
       {"last", 0, 0, 1},
       {"no-last", 0, 0, 2},
-      {"", required_argument, 0, 'm'},
+      {"", optional_argument, 0, 'm'},
       {"min", 0, 0, 3},
       {"no-min", 0, 0, 4},
       {"version", 0, 0, 0},
       {0, 0, 0, 0}};
-  char str[100];
-  int lastindex = 0;
+  // int lastindex = 0;
   while ((option_char = getopt_long(argc, argv, "w:p:s:hlm", long_options, &option_index)) != EOF)
   {
     // printf("%c, %s, %d\n",option_char, argv[optind-1],optind-1);
 
-    lastindex++;
+    // lastindex++;
     int n = 1;
     if (optarg)
     {
-      lastindex++;
+      // lastindex++;
       strtoudec(optarg, &n);
     }
 
@@ -360,16 +381,34 @@ void getoption(int argc,
       break;
     case 'h':
       // printf("%s", argv[lastindex]);
-      if (lastindex < argc - 1 && strtoudec(argv[lastindex + 1], &n))
+      if (optarg)
       {
-        lastindex++;
-        *phang = n;
+        if (strtoudec(optarg, &n))
+        {
+          // lastindex++;
+          *phang = n;
+        }
       }
       else
         *phang = 1;
       break;
     case 'l':
-      *plast = n;
+      if (optarg)
+      {
+        if (strtoudec(optarg, &n))
+        {
+          // lastindex++;
+          if (n == 1 || n == 0)
+            *plast = n;
+          else
+          {
+            bad_option_int(n);
+            return;
+          }
+        }
+      }
+      else
+        *phang = 1;
       break;
     case 1:
       *plast = 1;
@@ -378,7 +417,20 @@ void getoption(int argc,
       *plast = 0;
       break;
     case 'm':
-      *pmin = n;
+      if (optarg)
+      {
+        if (strtoudec(optarg, &n))
+        {
+          // lastindex++;
+          if (n == 1 || n == 0)
+            *pmin = n;
+          else
+          {
+            bad_option_int(n);
+            return;
+          }
+        }
+      }
       break;
     case 3:
       *pmin = 1;
@@ -387,70 +439,15 @@ void getoption(int argc,
       *pmin = 0;
       break;
     default:
-      snprintf(str, 100, "Bad Option: '%s'\n", argv[optind - 1]);
-      set_error(str);
+      bad_option_str(argv[optind - 1]);
+      return;
       break;
     }
-    if (lastindex != optind - 1)
-    {
-      if (lastindex == 2)
-      {
-        if (strtoudec(argv[1], &n))
-        {
-          if (n >= 9)
-          {
-            *pwidth = n;
-          }
-          else
-          {
-            *pprefix = n;
-          }
-        }
-        else
-        {
-          snprintf(str, 100, "Bad Option: '%s'\n", argv[lastindex - 1]);
-          set_error(str);
-        }
-      }
-      else
-      {
-        if (strtoudec(argv[lastindex], &n))
-        {
-          if (n >= 9)
-          {
-            *pwidth = n;
-          }
-          else
-          {
-            *pprefix = n;
-          }
-        }
-        else
-        {
-          snprintf(str, 100, "Bad Option: '%s'\n", argv[lastindex - 1]);
-          set_error(str);
-        }
-      }
-
-      lastindex = optind - 1;
-    }
-    // printf("lastindex: %d, optind-1: %d, argc: %d\n", lastindex, optind - 1, argc);
   }
-  int n = 1;
-  if (strtoudec(argv[1], &n))
+  for (int i = optind; i < argc; i++)
   {
-    if (n > 9)
-    {
-      *pwidth = n;
-    }
-    else
-    {
-      *pprefix = n;
-    }
-  }
-  if (argc - 1 != lastindex)
-  {
-    if (strtoudec(argv[argc - 1], &n))
+    int n = 1;
+    if (strtoudec(argv[i], &n))
     {
       if (n > 9)
       {
@@ -463,12 +460,12 @@ void getoption(int argc,
     }
     else
     {
-      snprintf(str, 100, "Bad Option: '%s'\n", argv[lastindex + 1]);
-      set_error(str);
+      bad_option_str(argv[i]);
+      return;
     }
-    lastindex = optind - 1;
   }
-  printf("w%d p%d s%d h%d l%d m%d\n", *pwidth, *pprefix, *psuffix, *phang, *plast, *pmin);
+
+  // printf("w%d p%d s%d h%d l%d m%d\n", *pwidth, *pprefix, *psuffix, *phang, *plast, *pmin);
 }
 int original_main(int argc, char *argv[])
 {
@@ -564,11 +561,21 @@ int original_main(int argc, char *argv[])
     setdefaults((const char *const *)inlines,
                 &width, &prefix, &suffix, &hang, &last, &min);
     char str[200];
-    if (prefix + suffix > width)
+    if (prefix + suffix >= width)
     {
-      snprintf(str, 200, "<width> = %d shorter than <prefix> + <suffix> = %d + %d = %d\n",
-               width, prefix, suffix, prefix + suffix);
-      set_error(str);
+      FILE *f;
+      char *s;
+      size_t x;
+      f = open_memstream(&s, &x);
+      fprintf(f, "<width> = %d shorter than <prefix> + <suffix> = %d + %d = %d\n",
+              width, prefix, suffix, prefix + suffix);
+      fflush(f);
+      fclose(f);
+      set_error(s);
+
+      // snprintf(str, 200, "<width> = %d shorter than <prefix> + <suffix> = %d + %d = %d\n",
+      //          width, prefix, suffix, prefix + suffix);
+      // set_error(str);
     }
 
     if (is_error())
