@@ -57,7 +57,8 @@ struct buffer *newbuffer(size_t itemsize)
   blk = (struct block *) calloc(1,sizeof (struct block));
   items = calloc(maxhere, itemsize);
   if (!buf || !blk || !items) {
-    strcpy(errmsg,outofmem);
+    // strcpy(errmsg,outofmem);
+    set_error(outofmem);
     goto nberror;
   }
 
@@ -68,7 +69,8 @@ struct buffer *newbuffer(size_t itemsize)
   blk->maxhere = maxhere;
   blk->items = items;
 
-  *errmsg = '\0';
+  // *errmsg = '\0';
+  clear_error();
   return buf;
 
   nberror:
@@ -122,7 +124,8 @@ void additem(struct buffer *buf, const void *item)
       new = (struct block * ) calloc(1,sizeof (struct block));
       items = calloc(maxhere, itemsize);
       if (!new || !items) {
-        strcpy(errmsg,outofmem);
+        // strcpy(errmsg,outofmem);
+        set_error(outofmem);
         goto aierror;
       }
       blk->next = new;
@@ -139,7 +142,8 @@ void additem(struct buffer *buf, const void *item)
 
   ++blk->numhere;
 
-  *errmsg = '\0';
+  // *errmsg = '\0';
+  clear_error();
   return;
 
   aierror:
@@ -168,7 +172,8 @@ void *copyitems(struct buffer *buf)
 
   r = calloc(n, itemsize);
   if (!r) {
-    strcpy(errmsg,outofmem);
+    // strcpy(errmsg,outofmem);
+    set_error(outofmem);
     return NULL;
   }
 
@@ -178,7 +183,8 @@ void *copyitems(struct buffer *buf)
     memcpy( ((char *) r) + (blk->numprevious * itemsize),
             blk->items, blk->numhere * itemsize);
 
-  *errmsg = '\0';
+  // *errmsg = '\0';
+  clear_error();
   return r;
 }
 
