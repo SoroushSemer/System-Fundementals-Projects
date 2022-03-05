@@ -499,6 +499,7 @@ int original_main(int argc, char *argv[])
       opt = strtok(NULL, whitechars);
     }
     getoption(arglen, optarr, &widthbak, &prefixbak, &suffixbak, &hangbak, &lastbak, &minbak);
+    free(optarr);
     // if(*errmsg) goto parcleanup;
     if (is_error())
       goto parcleanup;
