@@ -166,18 +166,107 @@ int main(int argc, char const *argv[])
     // x = sf_realloc(x, sz_x1);
     // sf_show_heap();
 
-    size_t sz_x = sizeof(double) * 8, sz_y = sizeof(int);
-    int *x = sf_malloc(sz_x);
-    *x = 20;
-    sf_show_heap();
+    // printf("-------%f-------\n", sf_internal_fragmentation());
+    // size_t sz_x = sizeof(double) * 8, sz_y = sizeof(int);
+    // int *x = sf_malloc(sz_x);
+    // *x = 20;
+    // sf_show_heap();
+    // printf("-------%f-------\n", sf_internal_fragmentation());
+    // int *y = sf_realloc(x, sz_y);
+    // *y = 5;
 
-    int *y = sf_realloc(x, sz_y);
-    *y = 5;
-    // sf_free(ptcd
-    sf_show_heap();
+    // // sf_free(ptcd
+    // printf("-------%f-------\n", sf_internal_fragmentation());
+    // sf_show_heap();
 
     // int *pp = sf_malloc(1400);
     // *pp = 1;
     // sf_show_heap();
+    // printf("-------%f-------\n", sf_internal_fragmentation());
+
+    // printf("allocating char[1000] of size %ld bytes\n", sizeof(char[1000]));
+    // void *ptr2 = sf_malloc(sizeof(char[1000]));
+    // void *ptr3 = sf_malloc(sizeof(char[1000]));
+    // void *ptr4 = sf_malloc(sizeof(char[1000]));
+
+    // // *ptr2 = "This is a 1000 character string";
+    // // *ptr3 = "This is a 1000 character string";
+    // // *ptr4 = "This is a 1000 character string";
+
+    // printf("address: 0x%.8lx\n", (long int)ptr2);
+    // printf("address: 0x%.8lx\n", (long int)ptr3);
+    // printf("address: 0x%.8lx\n", (long int)ptr4);
+    // // printf("value: %s\n", *ptr2);
+
+    // // sf_show_blocks();
+    // sf_show_heap();
+    // printf("\n----------------------\n");
+
+    // sf_free(ptr2);
+    // sf_free(ptr4);
+    // sf_free(ptr3);
+
+    // sf_show_heap();
+    // printf("\n----------------------\n");
+
+    // printf("allocating char[1000] of size %ld bytes\n", sizeof(char[1000]));
+    // void *ptr2 = sf_malloc(sizeof(char[1000]));
+    // void *ptr3 = sf_malloc(sizeof(char[1000]));
+
+    // // *ptr2 = "This is a 1000 character string";
+    // // *ptr3 = "This is a 1000 character string";
+    // // *ptr4 = "This is a 1000 character string";
+
+    // printf("address: 0x%.8lx\n", (long int)ptr2);
+    // printf("address: 0x%.8lx\n", (long int)ptr3);
+    // // printf("value: %s\n", *ptr2);
+
+    // // sf_show_blocks();
+    // sf_show_heap();
+    // printf("\n----------------------\n");
+
+    // sf_free(ptr3);
+
+    // sf_show_heap();
+    // printf("\n----------------------\n");
+
+    // sf_realloc(ptr2, 50);
+
+    // sf_show_heap();
+    // printf("\n----------------------\n");
+
+    sf_size_t sz_x = sizeof(int), sz_y = 1000;
+    void *x = sf_malloc(sz_x);
+    void *x2 = sf_malloc(sz_x);
+    void *x3 = sf_malloc(sz_x);
+    void *x4 = sf_malloc(sz_x);
+    void *y = sf_malloc(sz_y);
+    void *x5 = sf_malloc(sz_x);
+    void *y2 = sf_malloc(sz_y);
+    void *x6 = sf_malloc(sz_x);
+
+    sf_show_heap();
+    printf("\n----------------------\n");
+
+    sf_free(x);
+    sf_free(x2);
+    sf_free(x3);
+    sf_free(x4);
+    sf_free(x5);
+
+    sf_show_heap();
+    printf("\n----------------------\n");
+
+    sf_free(y);
+
+    sf_show_heap();
+    printf("\n----------------------\n");
+    sf_free(y2);
+
+    sf_free(x6);
+
+    sf_show_heap();
+    printf("\n----------------------\n");
+    printf("-----------%f----------\n", sf_peak_utilization());
     return EXIT_SUCCESS;
 }

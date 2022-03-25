@@ -29,7 +29,8 @@
  ---------------------------------------GLOBAL VARIABLES----------------------------------------------------
 */
 // int first_alloc = 1;
-
+int current_payload = 0;
+int max_payload = 0;
 /*
  ---------------------------------------GETTER/SETTER FUNCTIONS----------------------------------------------------
 */
@@ -48,7 +49,7 @@ void set_block_payload_size(sf_header *header, sf_header size)
 int get_block_payload_size(sf_header *header)
 {
     sf_header unobfiscated_header = obfiscate(header);
-    return (unobfiscated_header & PAYLOAD_BYTES);
+    return (unobfiscated_header & PAYLOAD_BYTES) >> 32;
 }
 
 int get_block_size(sf_header *header)
@@ -96,6 +97,11 @@ void set_block_in_qcklst(sf_header *header, int in_qcklst)
     *header = obfiscate(header);
     *header = (*header & SET_IN_QCKLST_BYTES) + in_qcklst;
     *header = obfiscate(header);
+}
+int get_header_in_qcklst(sf_header *header)
+{
+    sf_header unobfiscated_header = obfiscate(header);
+    return (unobfiscated_header & IN_QUICK_LIST);
 }
 
 /*
@@ -208,7 +214,8 @@ void place_in_free_list(sf_block *block)
     sf_block *sentinell = &sf_free_list_heads[free_list_index];
     sf_block *next_block = sentinell->body.links.next;
     block->body.links.prev = sentinell;
-
+    if (block == next_block)
+        return;
     if (next_block != sentinell)
     {
         block->body.links.next = next_block;
@@ -259,12 +266,12 @@ sf_block *coalesce(sf_block *block)
     sf_block *next_block = (sf_block *)((long int)block + get_block_size(&block->header));
     if (!get_header_prv_alloc(&block->header))
     {
-        if (block->body.links.next && block->body.links.prev)
+        if (block->body.links.next || block->body.links.prev)
             remove_from_free_list(block);
         sf_block *prev_block = get_prev_heap_block(block);
         if (!prev_block)
             return block;
-        if (prev_block->body.links.next && prev_block->body.links.prev)
+        if (prev_block->body.links.next || prev_block->body.links.prev)
             remove_from_free_list(prev_block);
         int prev_block_size = get_block_size(&prev_block->header);
         int curr_block_size = get_block_size(&block->header);
@@ -272,11 +279,21 @@ sf_block *coalesce(sf_block *block)
         place_in_free_list(prev_block);
         sf_footer *footer = (sf_footer *)((long int)prev_block + prev_block_size + curr_block_size);
         *footer = prev_block->header;
-        if (next_block != epilogue && !get_header_alloc(&next_block->header))
-            return coalesce(next_block);
+        next_block = (sf_block *)((long int)block + get_block_size(&block->header));
+        set_block_prv_alloc(&next_block->header, 0);
+        if (!get_header_alloc(&next_block->header))
+        {
+            sf_footer *footer = (sf_footer *)((long int)next_block + get_block_size(&next_block->header));
+            *footer = next_block->header;
+            sf_block *next = (sf_block *)footer;
+            next->prev_footer = next_block->header;
+            if (next_block != epilogue)
+                return coalesce(next_block);
+        }
         return prev_block;
     }
     if (next_block != epilogue && !get_header_alloc(&next_block->header))
+
         return coalesce(next_block);
     return block;
     // TO BE IMPLEMENTED
@@ -423,6 +440,11 @@ void place_in_quick_list(sf_block *block)
         sf_quick_lists[quick_list_index].first = block;
         set_block_in_qcklst(&head->header, 0);
         set_block_alloc(&head->header, 0);
+        sf_footer *footer = (sf_footer *)((long int)head + get_block_size(&head->header));
+        *footer = head->header;
+        sf_block *next = (sf_block *)footer;
+        next->prev_footer = head->header;
+        head = coalesce(head);
         place_in_free_list(head);
     }
 }
@@ -495,7 +517,8 @@ block_found:
     {
         remove_from_free_list(address);
     }
-
+    sf_block *next_block = (sf_block *)((long int)address + get_block_size(&address->header));
+    set_block_prv_alloc(&next_block->header, 1);
     if ((sf_block *)((long int)address + get_block_size(&address->header)) == epilogue)
     {
         set_block_prv_alloc(&epilogue->header, 1);
@@ -503,6 +526,9 @@ block_found:
     set_block_payload_size(&address->header, client_size);
 
     // printf("address: 0x%.8lx\n", (long int)address);
+    current_payload += client_size;
+    if (current_payload > max_payload)
+        max_payload = current_payload;
     return &address->body.payload;
 }
 
@@ -514,6 +540,7 @@ void sf_free(void *pp)
     // printf("%d", quick_list_index);
     // abort();
 
+    current_payload -= get_block_payload_size(&pp_block->header);
     set_block_payload_size(&pp_block->header, 0);
     if (quick_list_index < NUM_QUICK_LISTS)
     {
@@ -536,6 +563,9 @@ void sf_free(void *pp)
         {
             set_block_prv_alloc(&epilogue->header, 1);
         }
+
+        sf_block *next = (sf_block *)((long int)pp_block + get_block_size(&pp_block->header));
+        set_block_prv_alloc(&next->header, 0);
     }
 }
 
@@ -561,6 +591,7 @@ void *sf_realloc(void *pp, sf_size_t rsize)
     }
     else if (rsize < get_block_size(&pp_block->header))
     {
+        current_payload -= (get_block_payload_size(&pp_block->header) - client_size);
         if (get_block_size(&pp_block->header) - (int)rsize >= MIN_BLOCK_SIZE)
         {
             split(pp_block, rsize);
@@ -568,7 +599,9 @@ void *sf_realloc(void *pp, sf_size_t rsize)
             sf_block *free_block = (sf_block *)((long int)pp_block + get_block_size(&pp_block->header));
             coalesce(free_block);
             set_block_payload_size(&pp_block->header, client_size);
-            return pp_block;
+
+            // memcpy(pp_block->body.payload, pp, client_size);
+            return pp_block->body.payload;
         }
         else if (get_block_size(&pp_block->header) - (int)rsize >= 0)
         {
@@ -589,11 +622,29 @@ void *sf_realloc(void *pp, sf_size_t rsize)
 double sf_internal_fragmentation()
 {
     // TO BE IMPLEMENTED
-    abort();
+    if (sf_mem_start() == sf_mem_end())
+        return 0;
+    sf_block *epilogue = (sf_block *)(sf_mem_end() - HEADER_SIZE - HEADER_SIZE);
+    int total_payload = 0, total_size = 0;
+    for (sf_block *current_block = (sf_block *)(sf_mem_start() + 4 * HEADER_SIZE);
+         current_block < epilogue;
+         current_block = (sf_block *)((long int)current_block + get_block_size(&current_block->header)))
+    {
+        if (get_header_alloc(&current_block->header) && !get_header_in_qcklst(&current_block->header))
+        {
+            total_payload += (int)get_block_payload_size(&current_block->header);
+            total_size += (int)get_block_size(&current_block->header);
+        }
+    }
+    if (total_size)
+        return ((double)total_payload) / total_size;
+    return 0;
+    // abort();
 }
 
 double sf_peak_utilization()
 {
-    // TO BE IMPLEMENTED
-    abort();
+    if (sf_mem_end() - sf_mem_start() == 0)
+        return 0;
+    return ((double)max_payload) / (sf_mem_end() - sf_mem_start());
 }
