@@ -279,7 +279,9 @@ sf_block *coalesce(sf_block *block)
         place_in_free_list(prev_block);
         sf_footer *footer = (sf_footer *)((long int)prev_block + prev_block_size + curr_block_size);
         *footer = prev_block->header;
-        next_block = (sf_block *)((long int)block + get_block_size(&block->header));
+        if (!get_header_prv_alloc(&prev_block->header))
+            prev_block = coalesce(prev_block);
+        next_block = (sf_block *)((long int)prev_block + get_block_size(&prev_block->header));
         set_block_prv_alloc(&next_block->header, 0);
         if (!get_header_alloc(&next_block->header))
         {
@@ -431,21 +433,45 @@ void place_in_quick_list(sf_block *block)
     }
     else
     {
-        sf_block *head = sf_quick_lists[quick_list_index].first;
-        sf_block *next_block = (sf_block *)head->body.links.next;
-        block->body.links.next = next_block;
-        block->body.links.prev = NULL;
-
-        next_block->body.links.prev = block;
+        sf_block *current_block = sf_quick_lists[quick_list_index].first;
+        sf_block *next_block = (sf_block *)current_block->body.links.next;
+        for (int i = 0; i < sf_quick_lists[quick_list_index].length; i++)
+        {
+            set_block_in_qcklst(&current_block->header, 0);
+            set_block_alloc(&current_block->header, 0);
+            sf_footer *footer = (sf_footer *)((long int)current_block + get_block_size(&current_block->header));
+            *footer = current_block->header;
+            sf_block *next = (sf_block *)footer;
+            next->prev_footer = current_block->header;
+            set_block_prv_alloc(&next->header, 0);
+            current_block = coalesce(current_block);
+            footer = (sf_footer *)((long int)current_block + get_block_size(&current_block->header));
+            *footer = current_block->header;
+            next = (sf_block *)footer;
+            next->prev_footer = current_block->header;
+            place_in_free_list(current_block);
+            current_block = next_block;
+            if (next_block)
+                next_block = (sf_block *)next_block->body.links.next;
+        }
         sf_quick_lists[quick_list_index].first = block;
-        set_block_in_qcklst(&head->header, 0);
-        set_block_alloc(&head->header, 0);
-        sf_footer *footer = (sf_footer *)((long int)head + get_block_size(&head->header));
-        *footer = head->header;
-        sf_block *next = (sf_block *)footer;
-        next->prev_footer = head->header;
-        head = coalesce(head);
-        place_in_free_list(head);
+        sf_quick_lists[quick_list_index].length = 1;
+
+        // sf_block *head = sf_quick_lists[quick_list_index].first;
+        // sf_block *next_block = (sf_block *)head->body.links.next;
+        // block->body.links.next = next_block;
+        // block->body.links.prev = NULL;
+
+        // next_block->body.links.prev = block;
+        // sf_quick_lists[quick_list_index].first = block;
+        // set_block_in_qcklst(&head->header, 0);
+        // set_block_alloc(&head->header, 0);
+        // sf_footer *footer = (sf_footer *)((long int)head + get_block_size(&head->header));
+        // *footer = head->header;
+        // sf_block *next = (sf_block *)footer;
+        // next->prev_footer = head->header;
+        // head = coalesce(head);
+        // place_in_free_list(head);
     }
 }
 

@@ -301,11 +301,11 @@ Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT)
 	sf_block *bp = (sf_block *)((char *)x - 16);
 	cr_assert(!((bp->header ^ MAGIC) & THIS_BLOCK_ALLOCATED), "Allocated bit is not supposed to be set!");
 	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 3024,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
+			  "Block size (%ld) not what was expected (%ld)!",
 			  (bp->header ^ MAGIC) & 0xfffffff0, 3024);
 
 	cr_assert((((bp->header ^ MAGIC) >> 32) & 0xffffffff) == 0,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp->header ^ MAGIC) >> 32) & 0xffffffff), 0);
 
 	assert_quick_list_block_count(0, 0);
@@ -328,21 +328,21 @@ Test(sfmm_student_suite, student_test_2, .timeout = TEST_TIMEOUT)
 	sf_block *bp = (sf_block *)((char *)x - 16);
 	cr_assert((bp->header ^ MAGIC) & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 64,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
+			  "Block size (%ld) not what was expected (%ld)!",
 			  (bp->header ^ MAGIC) & 0xfffffff0, 64);
 
 	cr_assert((((bp->header ^ MAGIC) >> 32) & 0xffffffff) == 50,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp->header ^ MAGIC) >> 32) & 0xffffffff), 50);
 
 	sf_block *bp2 = (sf_block *)((long int)bp + 64);
 	cr_assert(!((bp2->header ^ MAGIC) & THIS_BLOCK_ALLOCATED), "Allocated bit is not supposed to be set!");
 	cr_assert(((bp2->header ^ MAGIC) & 0xfffffff0) == 2960,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
+			  "Block size (%ld) not what was expected (%ld)!",
 			  (bp2->header ^ MAGIC) & 0xfffffff0, 2960);
 
 	cr_assert((((bp2->header ^ MAGIC) >> 32) & 0xffffffff) == 0,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp2->header ^ MAGIC) >> 32) & 0xffffffff), 0);
 
 	assert_quick_list_block_count(0, 0);
@@ -360,11 +360,11 @@ Test(sfmm_student_suite, student_test_3, .timeout = TEST_TIMEOUT)
 	sf_block *bp = (sf_block *)((char *)y - 16);
 	cr_assert((bp->header ^ MAGIC) & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 32,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
+			  "Block size (%ld) not what was expected (%ld)!",
 			  (bp->header ^ MAGIC) & 0xfffffff0, 32);
 
 	cr_assert((((bp->header ^ MAGIC) >> 32) & 0xffffffff) == sz_y,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp->header ^ MAGIC) >> 32) & 0xffffffff), sz_y);
 
 	assert_quick_list_block_count(0, 0);
@@ -382,11 +382,11 @@ Test(sfmm_student_suite, student_test_4, .timeout = TEST_TIMEOUT)
 	sf_block *bp = (sf_block *)((char *)y - 16);
 	cr_assert((bp->header ^ MAGIC) & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 1008,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
+			  "Block size (%ld) not what was expected (%ld)!",
 			  (bp->header ^ MAGIC) & 0xfffffff0, 1008);
 
 	cr_assert((((bp->header ^ MAGIC) >> 32) & 0xffffffff) == sz_y,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp->header ^ MAGIC) >> 32) & 0xffffffff), sz_y);
 
 	assert_quick_list_block_count(0, 1);
@@ -416,19 +416,19 @@ Test(sfmm_student_suite, student_test_5, .timeout = TEST_TIMEOUT)
 	sf_free(y2);
 	sf_free(x6);
 
-	sf_block *bp = (sf_block *)((char *)y - 16);
+	sf_block *bp = (sf_block *)((char *)x - 16);
 	cr_assert(!((bp->header ^ MAGIC) & THIS_BLOCK_ALLOCATED), "Allocated bit is not supposed to be set!");
-	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 2048,
-			  "Realloc'ed block size (%ld) not what was expected (%ld)!",
-			  (bp->header ^ MAGIC) & 0xfffffff0, 2048);
+	cr_assert(((bp->header ^ MAGIC) & 0xfffffff0) == 2176,
+			  "Block size (%ld) not what was expected (%ld)!",
+			  (bp->header ^ MAGIC) & 0xfffffff0, 2176);
 
 	cr_assert((((bp->header ^ MAGIC) >> 32) & 0xffffffff) == 0,
-			  "Realloc'ed block payload size (%ld) not what was expected (%ld)!",
+			  "Block payload size (%ld) not what was expected (%ld)!",
 			  (((bp->header ^ MAGIC) >> 32) & 0xffffffff), 0);
 
-	assert_quick_list_block_count(0, 5);
-	assert_quick_list_block_count(32, 5);
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(32, 1);
 	assert_free_block_count(0, 2);
 	assert_free_block_count(816, 1);
-	assert_free_block_count(2048, 1);
+	assert_free_block_count(2176, 1);
 }
