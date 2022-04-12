@@ -4,6 +4,43 @@
 #include "mush.h"
 #include "debug.h"
 
+/********************************GLOBAL VARIABLES******************************************/
+
+typedef struct STMT_item
+{
+    STMT value;
+    struct STMT_item *next;
+    struct STMT_item *prev;
+
+} STMT_item;
+
+struct
+{
+    int pc;
+    STMT_item *sentinell;
+} program_store;
+
+/********************************MY FUNCTIONS******************************************/
+STMT_item *get_stmt(int pos)
+{
+    if (program_store.sentinell->next == program_store.sentinell)
+        return NULL;
+    for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
+        if (curr->value.lineno >= pos)
+            return curr;
+    return NULL;
+}
+
+void program_store_init()
+{
+    if (!program_store.sentinell)
+    {
+        program_store.sentinell = calloc(1, sizeof(STMT_item));
+        program_store.sentinell->next = program_store.sentinell->prev = program_store.sentinell;
+    }
+}
+
+/********************************REQUIRED FUNCTIONS******************************************/
 /*
  * This is the "program store" module for Mush.
  * It maintains a set of numbered statements, along with a "program counter"
@@ -24,9 +61,25 @@
  * @param out  The stream to which to output the listing.
  * @return  0 if successful, -1 if any error occurred.
  */
-int prog_list(FILE *out) {
-    // TO BE IMPLEMENTED
-    abort();
+int prog_list(FILE *out)
+{
+    program_store_init();
+    if (!out)
+        return -1;
+    if (program_store.sentinell->next == program_store.sentinell)
+        return 0;
+    show_stmt(out, &(program_store.sentinell->next->value));
+
+    for (STMT_item *curr = program_store.sentinell->next->next; curr != program_store.sentinell; curr = curr->next)
+    {
+        show_stmt(out, &curr->value);
+        if (curr->next->value.lineno < program_store.pc && curr->value.lineno > program_store.pc)
+            fputs("-->\n", out);
+        if (!curr->next)
+            return -1;
+    }
+
+    return 0;
 }
 
 /**
@@ -46,9 +99,49 @@ int prog_list(FILE *out) {
  * @param stmt  The statement to be inserted.
  * @return  0 if successful, -1 if any error occurred.
  */
-int prog_insert(STMT *stmt) {
-    // TO BE IMPLEMENTED
-    abort();
+int prog_insert(STMT *stmt)
+{
+    program_store_init();
+
+    STMT_item *s = calloc(1, sizeof(STMT_item));
+    s->value = *stmt;
+    free_stmt(stmt);
+    if (program_store.sentinell->next == program_store.sentinell)
+    {
+        s->next = s->prev = program_store.sentinell;
+        program_store.sentinell->next = program_store.sentinell->prev = s;
+    }
+    else
+    {
+        for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
+        {
+            if (s->value.lineno > curr->value.lineno)
+            {
+                STMT_item *next = curr->next;
+                curr->next = s;
+                s->prev = curr;
+                s->next = next;
+                next->prev = s;
+                return 0;
+            }
+            else if (s->value.lineno == curr->value.lineno)
+            {
+                STMT_item *prev = curr->prev;
+                STMT_item *next = curr->next;
+                prog_delete(curr->value.lineno, curr->value.lineno);
+                prev->next = s;
+                s->prev = prev;
+                next->prev = s;
+                s->next = next;
+                return 0;
+            }
+        }
+        s->prev = program_store.sentinell->prev;
+        s->next = program_store.sentinell;
+        program_store.sentinell->prev->next = s;
+        program_store.sentinell->prev = s;
+    }
+    return 0;
 }
 
 /**
@@ -68,9 +161,33 @@ int prog_insert(STMT *stmt) {
  * @param min  Lower end of the range of line numbers to be deleted.
  * @param max  Upper end of the range of line numbers to be deleted.
  */
-int prog_delete(int min, int max) {
-    // TO BE IMPLEMENTED
-    abort();
+int prog_delete(int min, int max)
+{
+    program_store_init();
+    if (program_store.sentinell->next == program_store.sentinell)
+        return 0;
+    for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
+    {
+        if (curr->value.lineno >= min && curr->value.lineno <= max)
+        {
+            STMT_item *prev = curr->prev;
+            STMT_item *next = curr->next;
+            prev->next = next;
+            next->prev = prev;
+            free_stmt(&curr->value);
+            free(curr);
+            curr = prev;
+        }
+        else if (curr->value.lineno > max)
+        {
+            if (program_store.pc < max && program_store.pc > min)
+                program_store.pc = curr->value.lineno;
+            break;
+        }
+    }
+    if (program_store.pc < max && program_store.pc > min)
+        program_store.pc = program_store.sentinell->prev->value.lineno;
+    return 0;
 }
 
 /**
@@ -78,9 +195,10 @@ int prog_delete(int min, int max) {
  * @details  This function resets the program counter to point just
  * before the first statement in the program.
  */
-void prog_reset(void) {
-    // TO BE IMPLEMENTED
-    abort();
+void prog_reset(void)
+{
+    program_store_init();
+    program_store.pc = 0;
 }
 
 /**
@@ -94,9 +212,13 @@ void prog_reset(void) {
  * @return  The first program statement after the current program
  * counter position, if any, otherwise NULL.
  */
-STMT *prog_fetch(void) {
-    // TO BE IMPLEMENTED
-    abort();
+STMT *prog_fetch(void)
+{
+    program_store_init();
+    STMT_item *s = get_stmt(program_store.pc + 1);
+    if (!s)
+        return NULL;
+    return &s->value;
 }
 
 /**
@@ -110,12 +232,17 @@ STMT *prog_fetch(void) {
  * @return The first program statement after the new program counter
  * position, if any, otherwise NULL.
  */
-STMT *prog_next() {
-    // TO BE IMPLEMENTED
-    abort();
+STMT *prog_next()
+{
+    program_store_init();
+    STMT_item *new_pc = get_stmt(program_store.pc + 1);
+    if (!new_pc)
+        return NULL;
+    program_store.pc = new_pc->value.lineno;
+    return &new_pc->next->value;
 }
 
-/**
+/*
  * @brief  Perform a "go to" operation on the program store.
  * @details  This function performs a "go to" operation on the program
  * store, by resetting the program counter to point to the position just
@@ -130,7 +257,13 @@ STMT *prog_next() {
  * @return  The statement having the specified line number, if such a
  * statement exists, otherwise NULL.
  */
-STMT *prog_goto(int lineno) {
-    // TO BE IMPLEMENTED
-    abort();
+STMT *prog_goto(int lineno)
+{
+    program_store_init();
+    STMT_item *new_pc_next = get_stmt(lineno);
+    if (!new_pc_next)
+        return NULL;
+    STMT_item *new_pc = new_pc_next->next;
+    program_store.pc = new_pc->value.lineno;
+    return &new_pc->value;
 }

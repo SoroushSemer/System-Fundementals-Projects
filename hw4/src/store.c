@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
+#include "syntax.h"
 /*
  * This is the "data store" module for Mush.
  * It maintains a mapping from variable names to values.
@@ -14,6 +14,22 @@
  * variable is the string representation of an integer.
  */
 
+typedef struct variable
+{
+    char *name;
+    VALUE_TYPE type;
+    union
+    {
+        long integer;
+        char *string;
+    } value;
+    struct variable *next;
+} variable;
+
+struct data_store
+{
+    variable *first;
+} data_store;
 /**
  * @brief  Get the current value of a variable as a string.
  * @details  This function retrieves the current value of a variable
@@ -28,9 +44,39 @@
  * @return  A string that is the current value of the variable, if any,
  * otherwise NULL.
  */
-char *store_get_string(char *var) {
-    // TO BE IMPLEMENTED
-    abort();
+char *store_get_string(char *var)
+{
+    if (!var)
+        return NULL;
+    if (!data_store.first)
+        return NULL;
+    for (variable *curr = data_store.first; curr; curr = curr->next)
+    {
+        int same = 1;
+        int i;
+        for (i = 0; var[i] != '\0'; i++)
+        {
+            if (curr->name[i] != var[i])
+            {
+                same = 0;
+                break;
+            }
+        }
+        if (same && var[i] == curr->name[i])
+        {
+            if (!curr->type)
+            {
+                curr->value.string = calloc(64, sizeof(char));
+                snprintf(curr->value.string, 64, "%ld", curr->value.integer);
+                return curr->value.string;
+            }
+            else
+            {
+                return curr->value.string;
+            }
+        }
+    }
+    return NULL;
 }
 
 /**
@@ -46,9 +92,37 @@ char *store_get_string(char *var) {
  * cannot be interpreted as an integer, then -1 is returned,
  * otherwise 0 is returned.
  */
-int store_get_int(char *var, long *valp) {
-    // TO BE IMPLEMENTED
-    abort();
+int store_get_int(char *var, long *valp)
+{
+    if (!var)
+        return -1;
+    if (!data_store.first)
+        return -1;
+    for (variable *curr = data_store.first; curr; curr = curr->next)
+    {
+        int same = 1;
+        int i;
+        for (i = 0; var[i] != '\0'; i++)
+        {
+            if (curr->name[i] != var[i])
+            {
+                same = 0;
+                break;
+            }
+        }
+        if (same && var[i] == curr->name[i])
+        {
+            if (!curr->type)
+            {
+                return curr->value.integer;
+            }
+            else
+            {
+                return -1;
+            }
+        }
+    }
+    return -1;
 }
 
 /**
@@ -66,9 +140,70 @@ int store_get_int(char *var, long *valp) {
  * @param  val  The value to set, or NULL if the variable is to become
  * un-set.
  */
-int store_set_string(char *var, char *val) {
-    // TO BE IMPLEMENTED
-    abort();
+int store_set_string(char *var, char *val)
+{
+    if (!var)
+        return -1;
+    if (!data_store.first)
+    {
+        if (val)
+        {
+            variable *v = calloc(1, sizeof(variable));
+            data_store.first = v;
+            v->name = strdup(var);
+            v->type = STRING_VALUE_TYPE;
+            v->value.string = strdup(val);
+            return 0;
+        }
+        else
+        {
+            variable *v = calloc(1, sizeof(variable));
+            data_store.first = v;
+            v->name = strdup(var);
+            v->type = NO_VALUE_TYPE;
+            return 0;
+        }
+    }
+    for (variable *curr = data_store.first; curr; curr = curr->next)
+    {
+        int same = 1;
+        int i;
+        for (i = 0; var[i] != '\0'; i++)
+        {
+            if (curr->name[i] != var[i])
+            {
+                same = 0;
+                break;
+            }
+        }
+        if (same && var[i] == curr->name[i])
+        {
+            if (val)
+            {
+                curr->type = STRING_VALUE_TYPE;
+                curr->value.string = strdup(val);
+                // curr->value.integer = 0;
+                return 0;
+            }
+            else
+            {
+                curr->type = NO_VALUE_TYPE;
+                // curr->value.integer = 0;
+                curr->value.string = NULL;
+                return 0;
+            }
+        }
+        if (!curr->next)
+        {
+            variable *v = calloc(1, sizeof(variable));
+            curr->next = v;
+            v->name = strdup(var);
+            v->type = STRING_VALUE_TYPE;
+            v->value.string = strdup(val);
+            return 0;
+        }
+    }
+    return -1;
 }
 
 /**
@@ -83,9 +218,49 @@ int store_set_string(char *var, char *val) {
  * @param  var  The variable whose value is to be set.
  * @param  val  The value to set.
  */
-int store_set_int(char *var, long val) {
-    // TO BE IMPLEMENTED
-    abort();
+int store_set_int(char *var, long val)
+{
+    if (!var)
+        return -1;
+    if (!data_store.first)
+    {
+        variable *v = calloc(1, sizeof(variable));
+        data_store.first = v;
+        v->name = strdup(var);
+        v->type = NUM_VALUE_TYPE;
+        v->value.integer = val;
+        return 0;
+    }
+    for (variable *curr = data_store.first; curr; curr = curr->next)
+    {
+        int same = 1;
+        int i;
+        for (i = 0; var[i] != '\0'; i++)
+        {
+            if (curr->name[i] != var[i])
+            {
+                same = 0;
+                break;
+            }
+        }
+        if (same && var[i] == curr->name[i])
+        {
+            curr->type = NUM_VALUE_TYPE;
+            // curr->value.string = NULL;
+            curr->value.integer = val;
+            return 0;
+        }
+        if (!curr->next)
+        {
+            variable *v = calloc(1, sizeof(variable));
+            curr->next = v;
+            v->name = strdup(var);
+            v->type = NUM_VALUE_TYPE;
+            v->value.integer = val;
+            return 0;
+        }
+    }
+    return -1;
 }
 
 /**
@@ -96,7 +271,39 @@ int store_set_int(char *var, long val) {
  *
  * @param f  The stream to which the store contents are to be printed.
  */
-void store_show(FILE *f) {
-    // TO BE IMPLEMENTED
-    abort();
+void store_show(FILE *f)
+{
+    fputc('{', f);
+    if (!data_store.first)
+        return;
+    variable *curr = data_store.first;
+    while (curr)
+    {
+
+        switch (curr->type)
+        {
+        case NUM_VALUE_TYPE:
+            fputs(curr->name, f);
+            fputc('=', f);
+            fprintf(f, "%ld", curr->value.integer);
+            break;
+        case STRING_VALUE_TYPE:
+            fputs(curr->name, f);
+            fputc('=', f);
+            fputs(curr->value.string, f);
+            break;
+        case NO_VALUE_TYPE:
+            break;
+        default:
+            printf("error at store show");
+            abort();
+            break;
+        }
+        if (curr->next && curr->type != NO_VALUE_TYPE)
+            fputc(',', f);
+        curr = curr->next;
+    }
+    fputc('}', f);
+    fflush(f);
+    // loop through data_store and print in "{JOB=0,STATUS=0,x=abcd,y=ifejio\n,abcd=5}" format
 }
