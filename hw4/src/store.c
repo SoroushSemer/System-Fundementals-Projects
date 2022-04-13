@@ -114,6 +114,7 @@ int store_get_int(char *var, long *valp)
         {
             if (!curr->type)
             {
+                *valp = curr->value.integer;
                 return curr->value.integer;
             }
             else

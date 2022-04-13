@@ -8,7 +8,7 @@
 
 typedef struct STMT_item
 {
-    STMT value;
+    STMT *value;
     struct STMT_item *next;
     struct STMT_item *prev;
 
@@ -26,7 +26,7 @@ STMT_item *get_stmt(int pos)
     if (program_store.sentinell->next == program_store.sentinell)
         return NULL;
     for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
-        if (curr->value.lineno >= pos)
+        if (curr->value->lineno >= pos)
             return curr;
     return NULL;
 }
@@ -64,17 +64,18 @@ void program_store_init()
 int prog_list(FILE *out)
 {
     program_store_init();
+    prog_goto(10);
     if (!out)
         return -1;
     if (program_store.sentinell->next == program_store.sentinell)
         return 0;
-    show_stmt(out, &(program_store.sentinell->next->value));
+    show_stmt(out, program_store.sentinell->next->value);
 
     for (STMT_item *curr = program_store.sentinell->next->next; curr != program_store.sentinell; curr = curr->next)
     {
-        show_stmt(out, &curr->value);
-        if (curr->next->value.lineno < program_store.pc && curr->value.lineno > program_store.pc)
+        if ((curr->next == program_store.sentinell) || (curr->next->value->lineno < program_store.pc && curr->value->lineno > program_store.pc))
             fputs("-->\n", out);
+        show_stmt(out, curr->value);
         if (!curr->next)
             return -1;
     }
@@ -104,8 +105,8 @@ int prog_insert(STMT *stmt)
     program_store_init();
 
     STMT_item *s = calloc(1, sizeof(STMT_item));
-    s->value = *stmt;
-    free_stmt(stmt);
+    s->value = stmt;
+    // free_stmt(stmt);
     if (program_store.sentinell->next == program_store.sentinell)
     {
         s->next = s->prev = program_store.sentinell;
@@ -115,7 +116,7 @@ int prog_insert(STMT *stmt)
     {
         for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
         {
-            if (s->value.lineno > curr->value.lineno)
+            if (s->value->lineno > curr->value->lineno)
             {
                 STMT_item *next = curr->next;
                 curr->next = s;
@@ -124,11 +125,11 @@ int prog_insert(STMT *stmt)
                 next->prev = s;
                 return 0;
             }
-            else if (s->value.lineno == curr->value.lineno)
+            else if (s->value->lineno == curr->value->lineno)
             {
                 STMT_item *prev = curr->prev;
                 STMT_item *next = curr->next;
-                prog_delete(curr->value.lineno, curr->value.lineno);
+                prog_delete(curr->value->lineno, curr->value->lineno);
                 prev->next = s;
                 s->prev = prev;
                 next->prev = s;
@@ -168,25 +169,25 @@ int prog_delete(int min, int max)
         return 0;
     for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
     {
-        if (curr->value.lineno >= min && curr->value.lineno <= max)
+        if (curr->value->lineno >= min && curr->value->lineno <= max)
         {
             STMT_item *prev = curr->prev;
             STMT_item *next = curr->next;
             prev->next = next;
             next->prev = prev;
-            free_stmt(&curr->value);
+            free_stmt(curr->value);
             free(curr);
             curr = prev;
         }
-        else if (curr->value.lineno > max)
+        else if (curr->value->lineno > max)
         {
             if (program_store.pc < max && program_store.pc > min)
-                program_store.pc = curr->value.lineno;
+                program_store.pc = curr->value->lineno;
             break;
         }
     }
     if (program_store.pc < max && program_store.pc > min)
-        program_store.pc = program_store.sentinell->prev->value.lineno;
+        program_store.pc = program_store.sentinell->prev->value->lineno;
     return 0;
 }
 
@@ -218,7 +219,7 @@ STMT *prog_fetch(void)
     STMT_item *s = get_stmt(program_store.pc + 1);
     if (!s)
         return NULL;
-    return &s->value;
+    return s->value;
 }
 
 /**
@@ -238,8 +239,8 @@ STMT *prog_next()
     STMT_item *new_pc = get_stmt(program_store.pc + 1);
     if (!new_pc)
         return NULL;
-    program_store.pc = new_pc->value.lineno;
-    return &new_pc->next->value;
+    program_store.pc = new_pc->value->lineno;
+    return new_pc->next->value;
 }
 
 /*
@@ -260,10 +261,9 @@ STMT *prog_next()
 STMT *prog_goto(int lineno)
 {
     program_store_init();
-    STMT_item *new_pc_next = get_stmt(lineno);
-    if (!new_pc_next)
+    program_store.pc = lineno;
+    STMT_item *new_pc = get_stmt(lineno);
+    if (!new_pc || new_pc->value->lineno != lineno)
         return NULL;
-    STMT_item *new_pc = new_pc_next->next;
-    program_store.pc = new_pc->value.lineno;
-    return &new_pc->value;
+    return new_pc->value;
 }
