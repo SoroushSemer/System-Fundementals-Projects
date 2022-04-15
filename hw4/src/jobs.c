@@ -177,6 +177,7 @@ void kill_leader_handler(int pid)
         if (child->status < COMPLETED)
             kill(child->id, SIGKILL);
         child->status = CANCELED;
+        jobs_expunge(child->id);
     }
     exit(0);
 }
@@ -323,18 +324,9 @@ int jobs_run(PIPELINE *pline)
     add_job(leader);
     leader->pline = copy_pipeline(pline);
     leader->status = RUNNNING;
-    // int n_processes = get_command_length(pline);
 
-    // int leader_to_main_pipe[2];
-    // if (pipe(leader_to_main_pipe) < 0)
-    // {
-    //     printf("error piping 291");
-    //     exit(7);
-    //     return -1;
-    // }
     if ((leader->id = fork()) == 0)
     { // this goes in to leader (main process' child)
-        // leader->pgid = leader->id;
 
         // close(leader_to_main_pipe[0]);             // close read
         job *first_child = calloc(1, sizeof(job)); // allocate the first child job
@@ -359,12 +351,6 @@ int jobs_run(PIPELINE *pline)
 
             next_child->pipe.input_fd = first_child_pipe[0]; // set the next childs input file to be the read side of the pipe
             first_child->pipe.output_fd = first_child_pipe[1];
-            // if (dup2(first_child->pipe.output_fd, STDOUT_FILENO) < 0) // set the output to go to the read side of the pipe
-            // {
-            //     printf("dup2 error 325");
-            //     exit(5);
-            //     return -1;
-            // }
 
             // close(first_child_pipe[0]);
             // close(first_child_pipe[1]);
@@ -378,21 +364,9 @@ int jobs_run(PIPELINE *pline)
             first_child->pipe.output_fd = open(pline->output_file, O_WRONLY); // open the output file
         }
 
-        // char *argv[get_arg_length(pline->commands)];
-        // ARG *curr = pline->commands->args;
-        // for (int i = 0; i < get_arg_length(pline->commands); i++, curr = curr->next)
-        // {
-        //     if (!curr)
-        //         exit(0);
-        //     argv[i] = eval_to_string(curr->expr);
-        // }
         if ((first_child->id = fork()) == 0) // fork in to the first child process
         {                                    // this goes in to the leaders child (main process' grandchild)
 
-            // char *command = pline->commands->args; // get the first arg (which is the actual command eg. echo)
-            // char *c = eval_to_string(pline->commands->args->expr);
-            // char **argv = pline->commands->args;   // get all arg for that command (eg. ["ls", "-l"])
-            // printf("executing command: %s\n", c[0]);
             if (first_child->pipe.output_fd)
             {
                 if (dup2(first_child->pipe.output_fd, STDOUT_FILENO) < 0) // set the output to go to the output file
@@ -422,15 +396,6 @@ int jobs_run(PIPELINE *pline)
             // free(c);
             exit(1);
         }
-        else
-        {
-            // if (write(leader_to_main_pipe[1], first_child, sizeof(job)) < 0)
-            // {
-            //     printf("write error 372");
-            //     exit(6);
-            //     return -1;
-            // }
-        }
         for (COMMAND *cmd = pline->commands->next; cmd; cmd = cmd->next) // loop through the commands starting at the second command
         {                                                                // loop through each command to branch from leader and execute
             job *child = next_child;                                     // set the current child to be the next from the previous loop or the second command if this is the first loop
@@ -442,16 +407,9 @@ int jobs_run(PIPELINE *pline)
                 next_child = calloc(1, sizeof(job)); // allocate a job for the next command
                 add_job(next_child);                 // add it the next child to the job table
                 next_child->pgid = getpid();         // set its pgid to be the leader process id
-                // next_child->pline = calloc(1, sizeof(PIPELINE)); // allocate the pipeline for the next child to connect the current child to the next child
+
                 int child_pipe[2]; // declare fd for the pipe
-                // child->pipe.output_fd = child_pipe[1];
-                // next_child->pipe.input_fd = child_pipe[0];
-                // if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0)
-                // { // set the input of to be the output from the previous child
-                //     printf("dup2 error 391");
-                //     exit(5);
-                //     return -1;
-                // }
+
                 if (pipe(child_pipe) < 0) // pipe from current child to next child
                 {
                     printf("pipe error 397");
@@ -464,44 +422,15 @@ int jobs_run(PIPELINE *pline)
                 // close(child_pipe[0]);
                 // close(child_pipe[1]);
             }
-
-            // if (write(leader_to_main_pipe, child, sizeof(job)) < 0)
-            //     return -1;
-
             else if (!child->next && !pline->capture_output && pline->output_file)
             {
                 child->pipe.output_fd = open(pline->output_file, O_WRONLY);
-                // if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0)
-                // {
-                //     printf("dup2 error 422");
-                //     exit(5);
-                //     return -1;
-                // }
-            }
-            else
-            {
-                // if (dup2(stdout_fd, STDOUT_FILENO) < 0)
-                // {
-                //     printf("dup2 error 490");
-                //     exit(5);
-                //     return -1;
-                // }
             }
 
             char **argv = calloc(get_arg_length(cmd), sizeof(char *));
-            // ARG *curr = cmd->args;
-            // for (int i = 0; i < get_arg_length(cmd); i++, curr = curr->next)
-            // {
-            //     if (!curr)
-            //         exit(0);
-            //     argv[i] = eval_to_string(curr->expr);
-            // }
-
             command_to_array(cmd, argv, get_arg_length(cmd));
             if ((child->id = fork()) == 0)
             { // this goes in to the leaders child (main process' grandchild)
-
-                // printf("executing command: %s\n", c[0]);
                 if (cmd->next)
                 {
                     if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0) // set the write side of the pipe to be the output
@@ -528,13 +457,6 @@ int jobs_run(PIPELINE *pline)
             {
                 signal(SIGKILL, &kill_leader_handler);
                 signal(SIGCHLD, &sig_chld_handler);
-                // if (write(leader_to_main_pipe[1], child, sizeof(job)) < 0)
-                // {
-                //     printf("write error 442");
-                //     exit(6);
-                //     return -1;
-                // }
-                // close(leader_to_main_pipe[1]);
             }
         }
         job *last_child;
@@ -550,37 +472,8 @@ int jobs_run(PIPELINE *pline)
     }
     else
     {
-        // close(leader_to_main_pipe[1]);
-        // for (int i = 0; i < n_processes; i++)
-        // {
-        //     job *child = calloc(1, sizeof(job));
-        //     if (read(leader_to_main_pipe[0], child, sizeof(job)) < 0)
-        //     {
-        //         printf("READ");
-        //         return -1;
-        //     }
-        //     add_job(child);
-        // }
-        // close(leader_to_main_pipe[0]);
-        // for (job *child = get_child(leader, NULL); child; child = get_child(leader, child))
-        // {
-        //     if (jobs_wait(child->id) < 0)
-        //         return -1;
-        //     jobs_expunge(child->id);
-        // }
-        // printf("NO WAY IT GOT TO THE END:%d", getpid());
         return leader->id;
     }
-    // else
-    // { // stay within main process
-    //     close(leader_to_main_pipe[1]);
-    //     job *j;
-    //     if (read(leader_to_main_pipe[0], j, sizeof(job)))
-    //         ;
-    //     add_job(j);
-    //     // free_pipeline(pline);
-    // }
-    // abort();
     return 0;
 }
 
@@ -603,14 +496,14 @@ int jobs_wait(int jobid)
     // if (j->status >= COMPLETED)
     //     return j->term;
 
-    for (job *child = get_child(j, NULL); child; child = get_child(j, child))
-    {
-        if (jobs_wait(child->id) < 0)
-            return -1;
-        jobs_expunge(child->id);
-    }
+    // for (job *child = get_child(j, NULL); child; child = get_child(j, child))
+    // {
+    //     if (jobs_wait(child->id) < 0)
+    //         return -1;
+    //     jobs_expunge(child->id);
+    // }
     waitpid(j->id, &j->term, 0);
-    fflush(stdout);
+    // fflush(stdout);
     // if (j->term)
     j->status = COMPLETED;
 

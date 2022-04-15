@@ -312,6 +312,11 @@ void store_show(FILE *f)
         if (curr->next && curr->type != NO_VALUE_TYPE)
             fputc(',', f);
         curr = curr->next;
+        if (!curr)
+        {
+            fputc('}', f);
+            fflush(f);
+        }
     }
 
     fflush(f);

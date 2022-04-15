@@ -73,24 +73,37 @@ void program_store_init()
 int prog_list(FILE *out)
 {
     program_store_init();
+    int arrow = 0;
     if (!out)
         return -1;
     if (program_store.sentinell->next == program_store.sentinell)
         return 0;
     if (!program_store.pc)
-        fputs("-->\n", out);
-    show_stmt(out, program_store.sentinell->next->value);
-
-    for (STMT_item *curr = program_store.sentinell->next->next; curr != program_store.sentinell; curr = curr->next)
     {
-        if ((curr->prev->value->lineno > program_store.pc && curr->value->lineno <= program_store.pc))
-            fputs("-->\n", out);
-        show_stmt(out, curr->value);
-
-        if (!curr->next)
-            return -1;
+        arrow = 1;
+        fputs("-->\n", out);
     }
-
+    show_stmt(out, program_store.sentinell->next->value);
+    STMT_item *prev = program_store.sentinell->next;
+    for (STMT_item *curr = get_stmt(program_store.sentinell->next->value->lineno + 1); curr != program_store.sentinell; curr = get_stmt(curr->value->lineno + 1))
+    {
+        if ((prev->value->lineno > program_store.pc && curr->value->lineno <= program_store.pc))
+        {
+            arrow = 1;
+            fputs("-->\n", out);
+        }
+        show_stmt(out, curr->value);
+        prev = curr;
+        if (!get_stmt(curr->value->lineno + 1))
+        {
+            if (!arrow)
+                fputs("-->\n", out);
+            debug("prog list error");
+            return -1;
+        }
+    }
+    if (!arrow)
+        fputs("-->\n", out);
     return 0;
 }
 
@@ -229,11 +242,12 @@ void prog_reset(void)
  */
 STMT *prog_fetch(void)
 {
-    debug("prog_fetch()");
+
     program_store_init();
     STMT_item *s = get_stmt(program_store.pc + 1);
     if (!s)
         return NULL;
+    debug("prog_fetch(): %d", s->value->lineno);
     return s->value;
 }
 
@@ -252,14 +266,16 @@ STMT *prog_next()
 {
     debug("prog_next()");
     program_store_init();
-    STMT_item *pc = get_stmt(program_store.pc);
+    STMT *pc = prog_fetch();
     STMT_item *new_pc = get_stmt((program_store.pc + 1));
     if (!new_pc)
+    {
+        program_store.pc++;
         return NULL;
+    }
     program_store.pc = new_pc->value->lineno;
-    return pc->value;
+    return pc;
 }
-
 /*
  * @brief  Perform a "go to" operation on the program store.
  * @details  This function performs a "go to" operation on the program
@@ -277,11 +293,21 @@ STMT *prog_next()
  */
 STMT *prog_goto(int lineno)
 {
-    debug("prog_goto()");
     program_store_init();
-    program_store.pc = lineno;
     STMT_item *new_pc = get_stmt(lineno);
     if (!new_pc || !new_pc->prev || new_pc->value->lineno != lineno)
         return NULL;
-    return new_pc->prev->value;
+    program_store.pc = lineno;
+    debug("prog_goto(%d)", program_store.pc);
+    int prev = 0;
+    STMT_item *prev_item;
+    for (STMT_item *curr = get_stmt(1); curr; curr = get_stmt(curr->value->lineno + 1))
+    {
+        if (curr->value->lineno < lineno && curr->value->lineno > prev)
+        {
+            prev_item = curr;
+            prev = prev_item->value->lineno;
+        }
+    }
+    return prev_item->value;
 }
