@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "syntax.h"
+#include "debug.h"
 /*
  * This is the "data store" module for Mush.
  * It maintains a mapping from variable names to values.
@@ -46,6 +47,7 @@ struct data_store
  */
 char *store_get_string(char *var)
 {
+    debug("store_set_string()");
     if (!var)
         return NULL;
     if (!data_store.first)
@@ -94,6 +96,7 @@ char *store_get_string(char *var)
  */
 int store_get_int(char *var, long *valp)
 {
+    debug("store_get_int()");
     if (!var)
         return -1;
     if (!data_store.first)
@@ -143,6 +146,7 @@ int store_get_int(char *var, long *valp)
  */
 int store_set_string(char *var, char *val)
 {
+    debug("store_set_string()");
     if (!var)
         return -1;
     if (!data_store.first)
@@ -221,6 +225,7 @@ int store_set_string(char *var, char *val)
  */
 int store_set_int(char *var, long val)
 {
+    debug("store_set_int()");
     if (!var)
         return -1;
     if (!data_store.first)
@@ -276,7 +281,11 @@ void store_show(FILE *f)
 {
     fputc('{', f);
     if (!data_store.first)
+    {
+        fputc('}', f);
+        fflush(f);
         return;
+    }
     variable *curr = data_store.first;
     while (curr)
     {
@@ -304,7 +313,7 @@ void store_show(FILE *f)
             fputc(',', f);
         curr = curr->next;
     }
-    fputc('}', f);
+
     fflush(f);
     // loop through data_store and print in "{JOB=0,STATUS=0,x=abcd,y=ifejio\n,abcd=5}" format
 }

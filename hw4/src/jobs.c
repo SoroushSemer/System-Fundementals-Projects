@@ -55,6 +55,11 @@ typedef struct job
     PIPELINE *pline;
     struct job *next;
     struct job *prev;
+    struct
+    {
+        int input_fd;
+        int output_fd;
+    } pipe;
 } job;
 
 struct job_table
@@ -65,7 +70,6 @@ struct job_table
 
 void show_job_status(FILE *f, job *j)
 {
-    fputc('<', f);
     switch (j->status)
     {
     case 0:
@@ -87,7 +91,7 @@ void show_job_status(FILE *f, job *j)
         printf("show_job_status FAILURE!");
         abort();
     }
-    fputs(">\t", f);
+    fputs("\t", f);
     fflush(f);
 }
 
@@ -107,6 +111,8 @@ job *get_child(job *parent, job *head)
 {
     if (!head)
         head = job_table.head;
+    else
+        head = head->next;
     for (job *curr = head; curr; curr = curr->next)
     {
         if (parent->id == curr->pgid)
@@ -128,6 +134,64 @@ void add_job(job *j)
     former_head->prev = j;
     job_table.head = j;
 }
+
+int get_arg_length(COMMAND *command)
+{
+    int count = 0;
+    for (ARG *a = command->args; a; a = a->next, count++)
+        ;
+    return count;
+}
+int get_command_length(PIPELINE *pline)
+{
+    int count = 0;
+    for (COMMAND *a = pline->commands; a; a = a->next, count++)
+        ;
+    return count;
+}
+void command_to_array(COMMAND *command, char **argv, int size)
+{
+    ARG *curr = command->args;
+    for (int i = 0; i < size; i++, curr = curr->next)
+    {
+        if (!curr)
+            return;
+        argv[i] = eval_to_string(curr->expr);
+    }
+}
+
+void sig_chld_handler(int pid)
+{
+    job *j = get_job(pid);
+    j->status = COMPLETED;
+    waitpid(j->id, &j->term, 0);
+}
+
+void kill_leader_handler(int pid)
+{
+    job *j = get_job(pid);
+    if (!j)
+        exit(0);
+    for (job *child = get_child(j, NULL); child; child = get_child(j, child))
+    {
+        if (child->status < COMPLETED)
+            kill(child->id, SIGKILL);
+        child->status = CANCELED;
+    }
+    exit(0);
+}
+
+void kill_main_handler(int pid)
+{
+    for (job *j = job_table.head; j; j = j->next)
+    {
+        if (j->status < COMPLETED)
+        {
+            kill(j->id, SIGKILL);
+        }
+        exit(0);
+    }
+}
 /**
  * @brief  Initialize the jobs module.
  * @details  This function is used to initialize the jobs module.
@@ -138,10 +202,13 @@ void add_job(job *j)
  */
 int jobs_init(void)
 {
+    debug("job_init()");
     // job_table.head->id = getpid();
     // // job_table.head->pg.id = getppid();
     // job_table.head->status = RUNNNING;
     // job_table.count = 1;
+    // signal(SIGKILL, &kill_main_handler);
+
     return 0;
 }
 
@@ -157,23 +224,25 @@ int jobs_init(void)
  */
 int jobs_fini(void)
 {
-    int a;
-    for (job *curr = job_table.head->next; curr; curr = curr->next)
-    {
-        if (curr->status < COMPLETED)
-        {
-            a = jobs_cancel(curr->id);
-            if (a)
-                return -1;
-            a = jobs_wait(curr->id);
-            if (a)
-                return -1;
-        }
-        a = jobs_expunge(curr->id);
-        if (a)
-            return -1;
-    }
-    return 0;
+    // debug("job_fini()");
+    // int a;
+    // for (job *curr = job_table.head; curr; curr = curr->next)
+    // {
+    //     if (curr->status < COMPLETED)
+    //     {
+    //         a = jobs_cancel(curr->id);
+    //         if (a)
+    //             return -1;
+    //         a = jobs_wait(curr->id);
+    //         if (a)
+    //             return -1;
+    //     }
+    //     a = jobs_expunge(curr->id);
+    //     if (a)
+    //         return -1;
+    // }
+    // return 0;
+    abort();
 }
 
 /**
@@ -199,13 +268,13 @@ int jobs_show(FILE *file)
     int count = -1;
     for (job *curr = job_table.head; curr; curr = curr->next, count++)
     {
-        fprintf(file, "<%d>\t<%d>\t", curr->id, curr->pgid);
+        fprintf(file, "%d\t%d\t", curr->id, curr->pgid);
         show_job_status(file, curr);
-        fputc('<', file);
+        // fputc('<', file);
         show_pipeline(file, curr->pline);
-        fputc('<', file);
-        if (curr->next)
-            fputc('\n', file);
+        // fputc('<', file);
+        // if (curr->next)
+        fputc('\n', file);
     }
     fflush(file);
     if (count == job_table.count)
@@ -248,130 +317,259 @@ int jobs_show(FILE *file)
  */
 int jobs_run(PIPELINE *pline)
 {
-    // job *leader = calloc(1, sizeof(job));
-    // add_job(leader);
-    // leader->pline = pline;
-    // leader->status = RUNNNING;
+    debug("job_run()");
+    job *leader = calloc(1, sizeof(job));
+    add_job(leader);
+    leader->pline = copy_pipeline(pline);
+    leader->status = RUNNNING;
+    // int n_processes = get_command_length(pline);
+
     // int leader_to_main_pipe[2];
     // if (pipe(leader_to_main_pipe) < 0)
     // {
-    //     printf("error piping");
+    //     printf("error piping 291");
+    //     exit(7);
     //     return -1;
     // }
-    // if ((leader->id = fork()) == 0)
-    // { // this goes in to leader (main process' child)
-    //     // leader->pgid = leader->id;
-    //     close(leader_to_main_pipe[0]);             // close read
-    //     job *first_child = calloc(1, sizeof(job)); // allocate the first child job
-    //     add_job(first_child);                      // add it to the job table
-    //     first_child->pgid = getpid();              // set its pgid to be the leader process id
-    //     first_child->status = RUNNNING;            // set it to running
-    //     job *next_child;                           // declare the next_child
-    //     if (!pline->commands->next)                // if there is going to be a second commands
-    //     {
-    //         next_child = calloc(1, sizeof(job));             // allocate the second child job
-    //         add_job(next_child);                             // add the second job to the table
-    //         next_child->pgid = getpid();                     // set its pgid to the leader id
-    //         next_child->pline = calloc(1, sizeof(PIPELINE)); // allocate its pipeline to connect it to the first child
-    //         int first_child_pipe[2];                         // declare an array for fd for pipe
-    //         if (pipe(first_child_pipe) < 0)                  // create a pipe
-    //         {
-    //             printf("pipe error");
-    //             return -1;
-    //         }
+    if ((leader->id = fork()) == 0)
+    { // this goes in to leader (main process' child)
+        // leader->pgid = leader->id;
 
-    //         next_child->pline->input_file = first_child_pipe[0]; // set the next childs input file to be the read side of the pipe
+        // close(leader_to_main_pipe[0]);             // close read
+        job *first_child = calloc(1, sizeof(job)); // allocate the first child job
+        add_job(first_child);                      // add it to the job table
+        first_child->pgid = getpid();              // set its pgid to be the leader process id
+        first_child->status = RUNNNING;            // set it to running
+        first_child->pline = copy_pipeline(pline);
+        job *next_child;           // declare the next_child
+        if (pline->commands->next) // if there is going to be a second commands
+        {
+            next_child = calloc(1, sizeof(job)); // allocate the second child job
+            add_job(next_child);                 // add the second job to the table
+            next_child->pgid = getpid();         // set its pgid to the leader id
+            // next_child->pline = calloc(1, sizeof(PIPELINE)); // allocate its pipeline to connect it to the first child
+            int first_child_pipe[2];        // declare an array for fd for pipe
+            if (pipe(first_child_pipe) < 0) // create a pipe
+            {
+                printf("pipe error 314");
+                exit(7);
+                return -1;
+            }
 
-    //         if (dup2(first_child_pipe[1], STDOUT_FILENO) < 0) // set the output to go to the read side of the pipe
-    //         {
-    //             printf("dup2 error");
-    //             return -1;
-    //         }
-    //     }
-    //     if ((first_child->id = fork()) == 0) // fork in to the first child process
-    //     {                                    // this goes in to the leaders child (main process' grandchild)
+            next_child->pipe.input_fd = first_child_pipe[0]; // set the next childs input file to be the read side of the pipe
+            first_child->pipe.output_fd = first_child_pipe[1];
+            // if (dup2(first_child->pipe.output_fd, STDOUT_FILENO) < 0) // set the output to go to the read side of the pipe
+            // {
+            //     printf("dup2 error 325");
+            //     exit(5);
+            //     return -1;
+            // }
 
-    //         if (pline->input_file) // if there is an input file
-    //         {
-    //             FILE *input = open(pline->input_file, "r"); // open the input file
-    //             if (dup2(input, STDIN_FILENO) < 0)          // set the input to read from the input file
-    //             {
-    //                 printf("dup2 error");
-    //                 return -1;
-    //             };
-    //         }
-    //         if (!pline->commands->next && !pline->capture_output && pline->output_file) // if this is the last command and there is an output file
-    //         {
-    //             FILE *output = open(pline->output_file, "w"); // open the output file
-    //             if (dup2(output, STDOUT_FILENO) < 0)          // set the output to go to the output file
-    //             {
-    //                 printf("dup2 error");
-    //                 return -1;
-    //             }
-    //         }
-    //         char *command = pline->commands->args; // get the first arg (which is the actual command eg. echo)
-    //         char **argv = pline->commands->args;   // get all arg for that command (eg. ["ls", "-l"])
-    //         if (execvp(command, argv) < 0)         // execute the command
-    //         {
-    //             printf("FAILURE");
-    //         }
-    //     }
-    //     for (COMMAND *cmd = pline->commands->next; cmd; cmd = cmd->next) // loop through the commands starting at the second command
-    //     {                                                                // loop through each command to branch from leader and execute
-    //         job *child = next_child;                                     // set the current child to be the next from the previous loop or the second command if this is the first loop
-    //         if (cmd->next)                                               // if this is not the last command
-    //         {
-    //             next_child = calloc(1, sizeof(job));             // allocate a job for the next command
-    //             add_job(next_child);                             // add it the next child to the job table
-    //             next_child->pgid = getpid();                     // set its pgid to be the leader process id
-    //             next_child->pline = calloc(1, sizeof(PIPELINE)); // allocate the pipeline for the next child to connect the current child to the next child
-    //             int child_pipe[2];                               // declare fd for the pipe
-    //             if (dup2(child->pline->input_file, STDIN_FILENO) < 0)
-    //             { // set the input of to be the output from the previous child
-    //                 printf("dup2 error");
-    //                 return -1;
-    //             }
-    //             if (pipe(child_pipe) < 0) // pipe from current child to next child
-    //             {
-    //                 printf("pipe error");
-    //                 return -1;
-    //             }
-    //             child->pline->output_file = child_pipe[1];              // set the current childs output to be the write side of the pipe to the next child
-    //             next_child->pline->input_file = child_pipe[0];          // set the next childs input to be the read side of the pipe that connects current to next child
-    //             if (dup2(child->pline->output_file, STDOUT_FILENO) < 0) // set the write side of the pipe to be the output
-    //             {
-    //                 printf("dup2 error");
-    //                 return -1;
-    //             }
-    //         }
+            // close(first_child_pipe[0]);
+            // close(first_child_pipe[1]);
+        }
+        if (pline->input_file) // if there is an input file
+        {
+            first_child->pipe.input_fd = open(pline->input_file, O_RDONLY); // open the input file
+        }
+        if (!pline->commands->next && !pline->capture_output && pline->output_file) // if this is the last command and there is an output file
+        {
+            first_child->pipe.output_fd = open(pline->output_file, O_WRONLY); // open the output file
+        }
 
-    //         // if (write(leader_to_main_pipe, child, sizeof(job)) < 0)
-    //         //     return -1;
-    //         child->status = RUNNNING; // set childs status to running
+        // char *argv[get_arg_length(pline->commands)];
+        // ARG *curr = pline->commands->args;
+        // for (int i = 0; i < get_arg_length(pline->commands); i++, curr = curr->next)
+        // {
+        //     if (!curr)
+        //         exit(0);
+        //     argv[i] = eval_to_string(curr->expr);
+        // }
+        if ((first_child->id = fork()) == 0) // fork in to the first child process
+        {                                    // this goes in to the leaders child (main process' grandchild)
 
-    //         if ((child->id = fork()) == 0)
-    //         { // this goes in to the leaders child (main process' grandchild)
-    //             if (!child->next && !pline->capture_output && pline->output_file)
-    //             {
-    //                 FILE *output = open(pline->output_file, "w");
-    //                 if (dup2(output, STDOUT_FILENO) < 0)
-    //                 {
-    //                     printf("dup2 error");
-    //                     return -1;
-    //                 }
-    //             }
-    //             char *command = cmd->args;
-    //             char *argv[] = cmd->args;
-    //             if (execvp(cmd->args, cmd->args) < 0)
-    //             {
-    //                 printf("FAILURE");
-    //             }
-    //         }
-    //         else
-    //         {
-    //         }
-    //     }
-    // }
+            // char *command = pline->commands->args; // get the first arg (which is the actual command eg. echo)
+            // char *c = eval_to_string(pline->commands->args->expr);
+            // char **argv = pline->commands->args;   // get all arg for that command (eg. ["ls", "-l"])
+            // printf("executing command: %s\n", c[0]);
+            if (first_child->pipe.output_fd)
+            {
+                if (dup2(first_child->pipe.output_fd, STDOUT_FILENO) < 0) // set the output to go to the output file
+                {
+                    printf("dup2 error 348");
+                    exit(5);
+                    return -1;
+                }
+            }
+            if (first_child->pipe.input_fd)
+            {
+                if (dup2(first_child->pipe.input_fd, STDIN_FILENO) < 0) // set the input to read from the input file
+                {
+                    printf("dup2 error 338");
+                    exit(5);
+                    return -1;
+                }
+            }
+            char **argv = calloc(get_arg_length(pline->commands) + 1, sizeof(char *));
+            command_to_array(pline->commands, argv, get_arg_length(pline->commands));
+            if (execvp(argv[0], argv) < 0) // execute the command
+            {
+                printf("FAILURE 361");
+                exit(8);
+                return -1;
+            }
+            // free(c);
+            exit(1);
+        }
+        else
+        {
+            // if (write(leader_to_main_pipe[1], first_child, sizeof(job)) < 0)
+            // {
+            //     printf("write error 372");
+            //     exit(6);
+            //     return -1;
+            // }
+        }
+        for (COMMAND *cmd = pline->commands->next; cmd; cmd = cmd->next) // loop through the commands starting at the second command
+        {                                                                // loop through each command to branch from leader and execute
+            job *child = next_child;                                     // set the current child to be the next from the previous loop or the second command if this is the first loop
+
+            child->status = RUNNNING; // set childs status to running
+            child->pline = copy_pipeline(pline);
+            if (cmd->next) // if this is not the last command
+            {
+                next_child = calloc(1, sizeof(job)); // allocate a job for the next command
+                add_job(next_child);                 // add it the next child to the job table
+                next_child->pgid = getpid();         // set its pgid to be the leader process id
+                // next_child->pline = calloc(1, sizeof(PIPELINE)); // allocate the pipeline for the next child to connect the current child to the next child
+                int child_pipe[2]; // declare fd for the pipe
+                // child->pipe.output_fd = child_pipe[1];
+                // next_child->pipe.input_fd = child_pipe[0];
+                // if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0)
+                // { // set the input of to be the output from the previous child
+                //     printf("dup2 error 391");
+                //     exit(5);
+                //     return -1;
+                // }
+                if (pipe(child_pipe) < 0) // pipe from current child to next child
+                {
+                    printf("pipe error 397");
+                    exit(7);
+                    return -1;
+                }
+                child->pipe.output_fd = child_pipe[1];     // set the current childs output to be the write side of the pipe to the next child
+                next_child->pipe.input_fd = child_pipe[0]; // set the next childs input to be the read side of the pipe that connects current to next child
+
+                // close(child_pipe[0]);
+                // close(child_pipe[1]);
+            }
+
+            // if (write(leader_to_main_pipe, child, sizeof(job)) < 0)
+            //     return -1;
+
+            else if (!child->next && !pline->capture_output && pline->output_file)
+            {
+                child->pipe.output_fd = open(pline->output_file, O_WRONLY);
+                // if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0)
+                // {
+                //     printf("dup2 error 422");
+                //     exit(5);
+                //     return -1;
+                // }
+            }
+            else
+            {
+                // if (dup2(stdout_fd, STDOUT_FILENO) < 0)
+                // {
+                //     printf("dup2 error 490");
+                //     exit(5);
+                //     return -1;
+                // }
+            }
+
+            char **argv = calloc(get_arg_length(cmd), sizeof(char *));
+            // ARG *curr = cmd->args;
+            // for (int i = 0; i < get_arg_length(cmd); i++, curr = curr->next)
+            // {
+            //     if (!curr)
+            //         exit(0);
+            //     argv[i] = eval_to_string(curr->expr);
+            // }
+
+            command_to_array(cmd, argv, get_arg_length(cmd));
+            if ((child->id = fork()) == 0)
+            { // this goes in to the leaders child (main process' grandchild)
+
+                // printf("executing command: %s\n", c[0]);
+                if (cmd->next)
+                {
+                    if (dup2(child->pipe.output_fd, STDOUT_FILENO) < 0) // set the write side of the pipe to be the output
+                    {
+                        printf("dup2 error 405");
+                        exit(5);
+                        return -1;
+                    }
+                }
+                if (dup2(child->pipe.input_fd, STDIN_FILENO) < 0)
+                {
+                    printf("dup2 error 428");
+                    exit(5);
+                    return -1;
+                }
+                if (execvp(argv[0], argv) < 0)
+                {
+                    printf("FAILURE 433");
+                }
+
+                exit(1);
+            }
+            else
+            {
+                signal(SIGKILL, &kill_leader_handler);
+                signal(SIGCHLD, &sig_chld_handler);
+                // if (write(leader_to_main_pipe[1], child, sizeof(job)) < 0)
+                // {
+                //     printf("write error 442");
+                //     exit(6);
+                //     return -1;
+                // }
+                // close(leader_to_main_pipe[1]);
+            }
+        }
+        job *last_child;
+        for (job *child = get_child(leader, NULL); child; child = get_child(leader, child))
+        {
+            if (jobs_wait(child->id) < 0)
+                return -1;
+            jobs_expunge(child->id);
+            if (!get_child(leader, child))
+                last_child = child;
+        }
+        exit(last_child->term);
+    }
+    else
+    {
+        // close(leader_to_main_pipe[1]);
+        // for (int i = 0; i < n_processes; i++)
+        // {
+        //     job *child = calloc(1, sizeof(job));
+        //     if (read(leader_to_main_pipe[0], child, sizeof(job)) < 0)
+        //     {
+        //         printf("READ");
+        //         return -1;
+        //     }
+        //     add_job(child);
+        // }
+        // close(leader_to_main_pipe[0]);
+        // for (job *child = get_child(leader, NULL); child; child = get_child(leader, child))
+        // {
+        //     if (jobs_wait(child->id) < 0)
+        //         return -1;
+        //     jobs_expunge(child->id);
+        // }
+        // printf("NO WAY IT GOT TO THE END:%d", getpid());
+        return leader->id;
+    }
     // else
     // { // stay within main process
     //     close(leader_to_main_pipe[1]);
@@ -381,7 +579,8 @@ int jobs_run(PIPELINE *pline)
     //     add_job(j);
     //     // free_pipeline(pline);
     // }
-    abort();
+    // abort();
+    return 0;
 }
 
 /**
@@ -396,20 +595,24 @@ int jobs_run(PIPELINE *pline)
  */
 int jobs_wait(int jobid)
 {
+    // debug("job_wait()");
     job *j = get_job(jobid);
     if (!j)
         return -1;
-    if (j->status >= COMPLETED)
-        return j->pgid;
+    // if (j->status >= COMPLETED)
+    //     return j->term;
 
     for (job *child = get_child(j, NULL); child; child = get_child(j, child))
     {
         if (jobs_wait(child->id) < 0)
             return -1;
+        jobs_expunge(child->id);
     }
     waitpid(j->id, &j->term, 0);
-    if (WEXITSTATUS(j->term))
-        j->status = COMPLETED;
+    fflush(stdout);
+    // if (j->term)
+    j->status = COMPLETED;
+
     // else if ()
     return j->term;
 }
@@ -426,6 +629,7 @@ int jobs_wait(int jobid)
  */
 int jobs_poll(int jobid)
 {
+    debug("job_poll()");
     job *j = get_job(jobid);
     int wstatus;
     if (!j)
@@ -451,7 +655,10 @@ int jobs_poll(int jobid)
  */
 int jobs_expunge(int jobid)
 {
+    debug("job_expunge()");
     job *j = get_job(jobid);
+    if (j->status < COMPLETED)
+        return -1;
     job_table.count--;
     job *prev = j->prev;
     job *next = j->next;
@@ -459,7 +666,9 @@ int jobs_expunge(int jobid)
         next->prev = prev;
     if (prev)
         prev->next = next;
-    free_pipeline(j->pline);
+    if (j == job_table.head)
+        job_table.head = next;
+    // free_pipeline(j->pline);
     free(j);
     return 0;
 }
@@ -483,8 +692,16 @@ int jobs_expunge(int jobid)
  */
 int jobs_cancel(int jobid)
 {
+    debug("job_cancel()");
     // TO BE IMPLEMENTED
-    abort();
+    job *j = get_job(jobid);
+    if (!j)
+        return -1;
+    if (j->status >= COMPLETED)
+        return -1;
+    kill(j->id, SIGKILL);
+    j->status = CANCELED;
+    return 0;
 }
 
 /**
@@ -499,6 +716,7 @@ int jobs_cancel(int jobid)
  */
 char *jobs_get_output(int jobid)
 {
+    debug("job_get_output()");
     // TO BE IMPLEMENTED
     abort();
 }
@@ -513,6 +731,7 @@ char *jobs_get_output(int jobid)
  */
 int jobs_pause(void)
 {
+    debug("job_pause()");
     // TO BE IMPLEMENTED
     abort();
 }

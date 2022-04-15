@@ -25,9 +25,18 @@ STMT_item *get_stmt(int pos)
 {
     if (program_store.sentinell->next == program_store.sentinell)
         return NULL;
+    STMT_item *min;
+    int min_val;
+    int first_loop = 1;
     for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
-        if (curr->value->lineno >= pos)
-            return curr;
+        if (curr->value->lineno >= pos && (first_loop || curr->value->lineno < min_val))
+        {
+            first_loop = 0;
+            min = curr;
+            min_val = min->value->lineno;
+        }
+    if (!first_loop)
+        return min;
     return NULL;
 }
 
@@ -64,23 +73,37 @@ void program_store_init()
 int prog_list(FILE *out)
 {
     program_store_init();
-    prog_goto(10);
     if (!out)
         return -1;
     if (program_store.sentinell->next == program_store.sentinell)
         return 0;
+    if (!program_store.pc)
+        fputs("-->\n", out);
     show_stmt(out, program_store.sentinell->next->value);
 
     for (STMT_item *curr = program_store.sentinell->next->next; curr != program_store.sentinell; curr = curr->next)
     {
-        if ((curr->next == program_store.sentinell) || (curr->next->value->lineno < program_store.pc && curr->value->lineno > program_store.pc))
+        if ((curr->prev->value->lineno > program_store.pc && curr->value->lineno <= program_store.pc))
             fputs("-->\n", out);
         show_stmt(out, curr->value);
+
         if (!curr->next)
             return -1;
     }
 
     return 0;
+}
+
+void print_everything()
+{
+    STMT_item *sentinel = program_store.sentinell;
+    STMT_item *cursor = sentinel->next;
+
+    while (cursor != sentinel)
+    {
+        printf("Line Number: %d\n", cursor->value->lineno);
+        cursor = cursor->next;
+    }
 }
 
 /**
@@ -102,6 +125,7 @@ int prog_list(FILE *out)
  */
 int prog_insert(STMT *stmt)
 {
+    debug("prog_insert()");
     program_store_init();
 
     STMT_item *s = calloc(1, sizeof(STMT_item));
@@ -123,6 +147,7 @@ int prog_insert(STMT *stmt)
                 s->prev = curr;
                 s->next = next;
                 next->prev = s;
+                print_everything();
                 return 0;
             }
             else if (s->value->lineno == curr->value->lineno)
@@ -134,6 +159,7 @@ int prog_insert(STMT *stmt)
                 s->prev = prev;
                 next->prev = s;
                 s->next = next;
+                print_everything();
                 return 0;
             }
         }
@@ -142,6 +168,7 @@ int prog_insert(STMT *stmt)
         program_store.sentinell->prev->next = s;
         program_store.sentinell->prev = s;
     }
+    print_everything();
     return 0;
 }
 
@@ -164,6 +191,7 @@ int prog_insert(STMT *stmt)
  */
 int prog_delete(int min, int max)
 {
+    debug("prog_delete()");
     program_store_init();
     if (program_store.sentinell->next == program_store.sentinell)
         return 0;
@@ -198,6 +226,7 @@ int prog_delete(int min, int max)
  */
 void prog_reset(void)
 {
+    debug("prog_reset()");
     program_store_init();
     program_store.pc = 0;
 }
@@ -215,6 +244,7 @@ void prog_reset(void)
  */
 STMT *prog_fetch(void)
 {
+    debug("prog_fetch()");
     program_store_init();
     STMT_item *s = get_stmt(program_store.pc + 1);
     if (!s)
@@ -235,12 +265,14 @@ STMT *prog_fetch(void)
  */
 STMT *prog_next()
 {
+    debug("prog_next()");
     program_store_init();
-    STMT_item *new_pc = get_stmt(program_store.pc + 1);
+    STMT_item *pc = get_stmt(program_store.pc);
+    STMT_item *new_pc = get_stmt((program_store.pc + 1));
     if (!new_pc)
         return NULL;
     program_store.pc = new_pc->value->lineno;
-    return new_pc->next->value;
+    return pc->value;
 }
 
 /*
@@ -260,10 +292,11 @@ STMT *prog_next()
  */
 STMT *prog_goto(int lineno)
 {
+    debug("prog_goto()");
     program_store_init();
     program_store.pc = lineno;
     STMT_item *new_pc = get_stmt(lineno);
-    if (!new_pc || new_pc->value->lineno != lineno)
+    if (!new_pc || !new_pc->prev || new_pc->value->lineno != lineno)
         return NULL;
-    return new_pc->value;
+    return new_pc->prev->value;
 }
