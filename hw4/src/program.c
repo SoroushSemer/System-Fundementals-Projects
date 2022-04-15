@@ -48,7 +48,7 @@ void program_store_init()
         program_store.sentinell->next = program_store.sentinell->prev = program_store.sentinell;
     }
 }
-
+static int firstrun;
 /********************************REQUIRED FUNCTIONS******************************************/
 /*
  * This is the "program store" module for Mush.
@@ -83,24 +83,24 @@ int prog_list(FILE *out)
         arrow = 1;
         fputs("-->\n", out);
     }
-    show_stmt(out, program_store.sentinell->next->value);
-    STMT_item *prev = program_store.sentinell->next;
-    for (STMT_item *curr = get_stmt(program_store.sentinell->next->value->lineno + 1); curr != program_store.sentinell; curr = get_stmt(curr->value->lineno + 1))
+    // show_stmt(out, program_store.sentinell->next->value);
+    int prev = 0;
+    for (STMT_item *curr = get_stmt(1); curr; curr = get_stmt(curr->value->lineno + 1))
     {
-        if ((prev->value->lineno > program_store.pc && curr->value->lineno <= program_store.pc))
+        if ((prev > program_store.pc && curr->value->lineno <= program_store.pc))
         {
             arrow = 1;
             fputs("-->\n", out);
         }
         show_stmt(out, curr->value);
-        prev = curr;
-        if (!get_stmt(curr->value->lineno + 1))
-        {
-            if (!arrow)
-                fputs("-->\n", out);
-            debug("prog list error");
-            return -1;
-        }
+        prev = curr->value->lineno;
+        // if (!get_stmt(curr->value->lineno + 1))
+        // {
+        //     if (!arrow)
+        //         fputs("-->\n", out);
+        //     debug("prog list error");
+        //     return -1;
+        // }
     }
     if (!arrow)
         fputs("-->\n", out);
@@ -193,6 +193,7 @@ int prog_delete(int min, int max)
     program_store_init();
     if (program_store.sentinell->next == program_store.sentinell)
         return 0;
+    int maxitem = 0;
     for (STMT_item *curr = program_store.sentinell->next; curr != program_store.sentinell; curr = curr->next)
     {
         if (curr->value->lineno >= min && curr->value->lineno <= max)
@@ -205,15 +206,17 @@ int prog_delete(int min, int max)
             free(curr);
             curr = prev;
         }
-        else if (curr->value->lineno > max)
+        else if (curr->value->lineno < min)
         {
-            if (program_store.pc < max && program_store.pc > min)
-                program_store.pc = curr->value->lineno;
-            break;
+            if (curr->value->lineno > maxitem)
+                maxitem = curr->value->lineno;
+            //     if (program_store.pc < max && program_store.pc > min)
+            //         program_store.pc = curr->value->lineno;
+            //     break;
         }
     }
     if (program_store.pc < max && program_store.pc > min)
-        program_store.pc = program_store.sentinell->prev->value->lineno;
+        program_store.pc = maxitem;
     return 0;
 }
 
@@ -226,6 +229,7 @@ void prog_reset(void)
 {
     debug("prog_reset()");
     program_store_init();
+    firstrun = 1;
     program_store.pc = 0;
 }
 
@@ -244,7 +248,8 @@ STMT *prog_fetch(void)
 {
 
     program_store_init();
-    STMT_item *s = get_stmt(program_store.pc + 1);
+    STMT_item *s;
+    s = get_stmt(program_store.pc);
     if (!s)
         return NULL;
     debug("prog_fetch(): %d", s->value->lineno);
@@ -268,13 +273,22 @@ STMT *prog_next()
     program_store_init();
     STMT *pc = prog_fetch();
     STMT_item *new_pc = get_stmt((program_store.pc + 1));
-    if (!new_pc)
+    if (!new_pc || !new_pc->value)
     {
         program_store.pc++;
-        return NULL;
+        return pc;
     }
-    program_store.pc = new_pc->value->lineno;
-    return pc;
+    if (firstrun)
+    {
+        STMT_item *new_pc_next = get_stmt((new_pc->value->lineno + 1));
+        program_store.pc = new_pc_next->value->lineno;
+        firstrun = 0;
+    }
+    else
+    {
+        program_store.pc = new_pc->value->lineno;
+    }
+    return new_pc->value;
 }
 /*
  * @brief  Perform a "go to" operation on the program store.
@@ -303,11 +317,15 @@ STMT *prog_goto(int lineno)
     STMT_item *prev_item;
     for (STMT_item *curr = get_stmt(1); curr; curr = get_stmt(curr->value->lineno + 1))
     {
-        if (curr->value->lineno < lineno && curr->value->lineno > prev)
+        if (curr->value->lineno <= lineno && curr->value->lineno > prev)
         {
             prev_item = curr;
             prev = prev_item->value->lineno;
         }
     }
+    // if (!prev_item->value)
+    // {
+    //     return new_pc->value;
+    // }
     return prev_item->value;
 }

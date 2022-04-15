@@ -47,7 +47,7 @@ struct data_store
  */
 char *store_get_string(char *var)
 {
-    debug("store_set_string()");
+    debug("store_get_string()");
     if (!var)
         return NULL;
     if (!data_store.first)
@@ -66,13 +66,14 @@ char *store_get_string(char *var)
         }
         if (same && var[i] == curr->name[i])
         {
-            if (!curr->type)
+            if (curr->type == NUM_VALUE_TYPE)
             {
-                curr->value.string = calloc(64, sizeof(char));
-                snprintf(curr->value.string, 64, "%ld", curr->value.integer);
-                return curr->value.string;
+                char *s = calloc(64, sizeof(char));
+                snprintf(s, 64, "%ld", curr->value.integer);
+                debug("IM returning : %s which is supposed to be %ld", s, curr->value.integer);
+                return s;
             }
-            else
+            else if (curr->type == STRING_VALUE_TYPE)
             {
                 return curr->value.string;
             }
@@ -115,10 +116,24 @@ int store_get_int(char *var, long *valp)
         }
         if (same && var[i] == curr->name[i])
         {
-            if (!curr->type)
+            if (curr->type == NUM_VALUE_TYPE)
             {
                 *valp = curr->value.integer;
-                return curr->value.integer;
+                return 0;
+            }
+            else if (curr->type == STRING_VALUE_TYPE)
+            {
+                int len = strlen(curr->value.string);
+                if (atoi(curr->value.string))
+                {
+                    *valp = atoi(curr->value.string);
+                    return 0;
+                }
+                else if (len == 1 && curr->value.string[0] == '0')
+                {
+                    *valp = 0;
+                    return 0;
+                }
             }
             else
             {
@@ -129,6 +144,63 @@ int store_get_int(char *var, long *valp)
     return -1;
 }
 
+/**
+ * @brief  Set the value of a variable as an integer.
+ * @details  This function sets the current value of a specified
+ * variable to be a specified integer.  If the variable already
+ * has a value, then that value is replaced.  Ownership of the variable
+ * string is not transferred to the data store module as a result of
+ * this call; the data store module makes such copies of this string
+ * as it may require.
+ *
+ * @param  var  The variable whose value is to be set.
+ * @param  val  The value to set.
+ */
+int store_set_int(char *var, long val)
+{
+    debug("store_set_int(%s, %ld)", var, val);
+    if (!var)
+        return -1;
+    if (!data_store.first)
+    {
+        variable *v = calloc(1, sizeof(variable));
+        data_store.first = v;
+        v->name = strdup(var);
+        v->type = NUM_VALUE_TYPE;
+        v->value.integer = val;
+        return 0;
+    }
+    for (variable *curr = data_store.first; curr; curr = curr->next)
+    {
+        int same = 1;
+        int i;
+        for (i = 0; var[i] != '\0'; i++)
+        {
+            if (curr->name[i] != var[i])
+            {
+                same = 0;
+                break;
+            }
+        }
+        if (same && var[i] == curr->name[i])
+        {
+            curr->type = NUM_VALUE_TYPE;
+            // curr->value.string = NULL;
+            curr->value.integer = val;
+            return 0;
+        }
+        if (!curr->next)
+        {
+            variable *v = calloc(1, sizeof(variable));
+            curr->next = v;
+            v->name = strdup(var);
+            v->type = NUM_VALUE_TYPE;
+            v->value.integer = val;
+            return 0;
+        }
+    }
+    return -1;
+}
 /**
  * @brief  Set the value of a variable as a string.
  * @details  This function sets the current value of a specified
@@ -146,9 +218,10 @@ int store_get_int(char *var, long *valp)
  */
 int store_set_string(char *var, char *val)
 {
-    debug("store_set_string()");
+    debug("store_set_string(%s, %s)", var, val);
     if (!var)
         return -1;
+
     if (!data_store.first)
     {
         if (val)
@@ -205,64 +278,6 @@ int store_set_string(char *var, char *val)
             v->name = strdup(var);
             v->type = STRING_VALUE_TYPE;
             v->value.string = strdup(val);
-            return 0;
-        }
-    }
-    return -1;
-}
-
-/**
- * @brief  Set the value of a variable as an integer.
- * @details  This function sets the current value of a specified
- * variable to be a specified integer.  If the variable already
- * has a value, then that value is replaced.  Ownership of the variable
- * string is not transferred to the data store module as a result of
- * this call; the data store module makes such copies of this string
- * as it may require.
- *
- * @param  var  The variable whose value is to be set.
- * @param  val  The value to set.
- */
-int store_set_int(char *var, long val)
-{
-    debug("store_set_int()");
-    if (!var)
-        return -1;
-    if (!data_store.first)
-    {
-        variable *v = calloc(1, sizeof(variable));
-        data_store.first = v;
-        v->name = strdup(var);
-        v->type = NUM_VALUE_TYPE;
-        v->value.integer = val;
-        return 0;
-    }
-    for (variable *curr = data_store.first; curr; curr = curr->next)
-    {
-        int same = 1;
-        int i;
-        for (i = 0; var[i] != '\0'; i++)
-        {
-            if (curr->name[i] != var[i])
-            {
-                same = 0;
-                break;
-            }
-        }
-        if (same && var[i] == curr->name[i])
-        {
-            curr->type = NUM_VALUE_TYPE;
-            // curr->value.string = NULL;
-            curr->value.integer = val;
-            return 0;
-        }
-        if (!curr->next)
-        {
-            variable *v = calloc(1, sizeof(variable));
-            curr->next = v;
-            v->name = strdup(var);
-            v->type = NUM_VALUE_TYPE;
-            v->value.integer = val;
             return 0;
         }
     }

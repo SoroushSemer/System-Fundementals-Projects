@@ -193,6 +193,15 @@ void kill_main_handler(int pid)
         exit(0);
     }
 }
+void leader_done()
+{
+    int status;
+    int pid = wait(&status);
+    job *leader = get_job(pid);
+    if (!leader)
+        abort();
+    leader->status = COMPLETED;
+}
 /**
  * @brief  Initialize the jobs module.
  * @details  This function is used to initialize the jobs module.
@@ -612,7 +621,7 @@ char *jobs_get_output(int jobid)
 {
     debug("job_get_output()");
     // TO BE IMPLEMENTED
-    abort();
+    return NULL;
 }
 
 /**
@@ -625,7 +634,12 @@ char *jobs_get_output(int jobid)
  */
 int jobs_pause(void)
 {
-    debug("job_pause()");
-    // TO BE IMPLEMENTED
-    abort();
+    signal(SIGCHLD, &leader_done);
+    sigset_t my_set;
+    sigfillset(&my_set);
+    sigdelset(&my_set, SIGCHLD);
+    debug("pause");
+    sigsuspend(&my_set);
+    // debug("unpause %d", a);
+    return 0;
 }
