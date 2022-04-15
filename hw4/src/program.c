@@ -94,18 +94,6 @@ int prog_list(FILE *out)
     return 0;
 }
 
-void print_everything()
-{
-    STMT_item *sentinel = program_store.sentinell;
-    STMT_item *cursor = sentinel->next;
-
-    while (cursor != sentinel)
-    {
-        printf("Line Number: %d\n", cursor->value->lineno);
-        cursor = cursor->next;
-    }
-}
-
 /**
  * @brief  Insert a new statement into the program store.
  * @details  This function inserts a new statement into the program store.
@@ -147,7 +135,6 @@ int prog_insert(STMT *stmt)
                 s->prev = curr;
                 s->next = next;
                 next->prev = s;
-                print_everything();
                 return 0;
             }
             else if (s->value->lineno == curr->value->lineno)
@@ -159,7 +146,6 @@ int prog_insert(STMT *stmt)
                 s->prev = prev;
                 next->prev = s;
                 s->next = next;
-                print_everything();
                 return 0;
             }
         }
@@ -168,7 +154,6 @@ int prog_insert(STMT *stmt)
         program_store.sentinell->prev->next = s;
         program_store.sentinell->prev = s;
     }
-    print_everything();
     return 0;
 }
 

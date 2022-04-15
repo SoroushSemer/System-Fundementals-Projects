@@ -242,7 +242,8 @@ int jobs_fini(void)
     //         return -1;
     // }
     // return 0;
-    abort();
+    // abort();
+    return 0;
 }
 
 /**
