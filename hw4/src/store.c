@@ -184,6 +184,10 @@ int store_set_int(char *var, long val)
         }
         if (same && var[i] == curr->name[i])
         {
+            if (curr->type == STRING_VALUE_TYPE)
+            {
+                free(curr->value.string);
+            }
             curr->type = NUM_VALUE_TYPE;
             // curr->value.string = NULL;
             curr->value.integer = val;
@@ -256,6 +260,10 @@ int store_set_string(char *var, char *val)
         }
         if (same && var[i] == curr->name[i])
         {
+            if (curr->type == STRING_VALUE_TYPE)
+            {
+                free(curr->value.string);
+            }
             if (val)
             {
                 curr->type = STRING_VALUE_TYPE;

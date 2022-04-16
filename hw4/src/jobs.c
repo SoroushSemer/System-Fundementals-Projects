@@ -12,6 +12,7 @@
 #include "mush.h"
 #include "debug.h"
 
+#
 /*
  * This is the "jobs" module for Mush.
  * It maintains a table of jobs in various stages of execution, and it
@@ -60,6 +61,13 @@ typedef struct job
         int input_fd;
         int output_fd;
     } pipe;
+    struct
+    {
+        FILE *file;
+        char *string;
+        int pipe[2];
+        size_t size;
+    } captured_output;
 } job;
 
 struct job_table
@@ -67,6 +75,8 @@ struct job_table
     job *head;
     int count;
 } job_table;
+
+FILE *captured_output;
 
 void show_job_status(FILE *f, job *j)
 {
@@ -202,6 +212,32 @@ void leader_done()
         abort();
     leader->status = COMPLETED;
 }
+
+void output_handler(int pid)
+{
+    for (job *leader = job_table.head; leader; leader = leader->next)
+    {
+        if (leader->status != COMPLETED)
+            continue;
+        char buffer[4096];
+        while (errno != EWOULDBLOCK)
+        {
+
+            read(leader->captured_output.pipe[0], buffer, sizeof(buffer));
+
+            if (errno != EWOULDBLOCK)
+                break;
+
+            if (!leader->captured_output.file)
+            {
+                leader->captured_output.file = open_memstream(&leader->captured_output.string, &leader->captured_output.size);
+            }
+            fputs(buffer, leader->captured_output.file);
+            fclose(leader->captured_output.file);
+        }
+    }
+}
+
 /**
  * @brief  Initialize the jobs module.
  * @details  This function is used to initialize the jobs module.
@@ -234,25 +270,26 @@ int jobs_init(void)
  */
 int jobs_fini(void)
 {
-    // debug("job_fini()");
-    // int a;
-    // for (job *curr = job_table.head; curr; curr = curr->next)
-    // {
-    //     if (curr->status < COMPLETED)
-    //     {
-    //         a = jobs_cancel(curr->id);
-    //         if (a)
-    //             return -1;
-    //         a = jobs_wait(curr->id);
-    //         if (a)
-    //             return -1;
-    //     }
-    //     a = jobs_expunge(curr->id);
-    //     if (a)
-    //         return -1;
-    // }
+    debug("job_fini()");
+    int a;
+    for (job *curr = job_table.head; curr; curr = curr->next)
+    {
+        if (curr->status < COMPLETED)
+        {
+            a = jobs_cancel(curr->id);
+            if (a)
+                return -1;
+            a = jobs_wait(curr->id);
+            if (a)
+                return -1;
+        }
+        a = jobs_expunge(curr->id);
+        if (a)
+            return -1;
+    }
     // return 0;
     // abort();
+
     return 0;
 }
 
@@ -333,11 +370,24 @@ int jobs_run(PIPELINE *pline)
     add_job(leader);
     leader->pline = copy_pipeline(pline);
     leader->status = RUNNNING;
+    if (pline->capture_output)
+    {
+        if (pipe(leader->captured_output.pipe) < 0)
+        {
+            printf("pipe error");
+            exit(7);
+        }
+        fcntl(leader->captured_output.pipe[0], F_SETFL, O_NONBLOCK);
+        fcntl(leader->captured_output.pipe[0], F_SETFL, O_ASYNC);
+        fcntl(leader->captured_output.pipe[0], F_SETOWN, getpid());
+    }
 
     if ((leader->id = fork()) == 0)
     { // this goes in to leader (main process' child)
-
-        // close(leader_to_main_pipe[0]);             // close read
+        if (pline->capture_output)
+        {
+            close(leader->captured_output.pipe[0]); // close read
+        }
         job *first_child = calloc(1, sizeof(job)); // allocate the first child job
         add_job(first_child);                      // add it to the job table
         first_child->pgid = getpid();              // set its pgid to be the leader process id
@@ -372,6 +422,15 @@ int jobs_run(PIPELINE *pline)
         {
             first_child->pipe.output_fd = open(pline->output_file, O_WRONLY); // open the output file
         }
+        else if (!pline->commands->next && pline->capture_output)
+        {
+            if (dup2(leader->captured_output.pipe[1], STDOUT_FILENO) < 0)
+            {
+                printf("dup2 error427");
+                exit(5);
+                return -1;
+            }
+        }
 
         if ((first_child->id = fork()) == 0) // fork in to the first child process
         {                                    // this goes in to the leaders child (main process' grandchild)
@@ -384,6 +443,7 @@ int jobs_run(PIPELINE *pline)
                     exit(5);
                     return -1;
                 }
+                close(first_child->pipe.output_fd);
             }
             if (first_child->pipe.input_fd)
             {
@@ -393,6 +453,7 @@ int jobs_run(PIPELINE *pline)
                     exit(5);
                     return -1;
                 }
+                close(first_child->pipe.input_fd);
             }
             char **argv = calloc(get_arg_length(pline->commands) + 1, sizeof(char *));
             command_to_array(pline->commands, argv, get_arg_length(pline->commands));
@@ -435,6 +496,15 @@ int jobs_run(PIPELINE *pline)
             {
                 child->pipe.output_fd = open(pline->output_file, O_WRONLY);
             }
+            else if (!child->next && pline->capture_output)
+            {
+                if (dup2(leader->captured_output.pipe[1], STDOUT_FILENO) < 0)
+                {
+                    printf("dup2 error501");
+                    exit(5);
+                    return -1;
+                }
+            }
 
             char **argv = calloc(get_arg_length(cmd), sizeof(char *));
             command_to_array(cmd, argv, get_arg_length(cmd));
@@ -448,6 +518,7 @@ int jobs_run(PIPELINE *pline)
                         exit(5);
                         return -1;
                     }
+                    close(child->pipe.output_fd);
                 }
                 if (dup2(child->pipe.input_fd, STDIN_FILENO) < 0)
                 {
@@ -455,6 +526,7 @@ int jobs_run(PIPELINE *pline)
                     exit(5);
                     return -1;
                 }
+                close(child->pipe.input_fd);
                 if (execvp(argv[0], argv) < 0)
                 {
                     printf("FAILURE 433");
@@ -481,6 +553,11 @@ int jobs_run(PIPELINE *pline)
     }
     else
     {
+        if (pline->capture_output)
+        {
+            close(leader->captured_output.pipe[1]);
+            signal(SIGIO, &output_handler);
+        }
         return leader->id;
     }
     return 0;
@@ -571,8 +648,11 @@ int jobs_expunge(int jobid)
         prev->next = next;
     if (j == job_table.head)
         job_table.head = next;
-    // free_pipeline(j->pline);
+    free_pipeline(j->pline);
+    if (j->captured_output.string)
+        free(j->captured_output.string);
     free(j);
+
     return 0;
 }
 
@@ -621,7 +701,12 @@ char *jobs_get_output(int jobid)
 {
     debug("job_get_output()");
     // TO BE IMPLEMENTED
-    return NULL;
+
+    job *j = get_job(jobid);
+    if (!j || j->status != COMPLETED || !j->captured_output.size)
+        return NULL;
+
+    return j->captured_output.string;
 }
 
 /**

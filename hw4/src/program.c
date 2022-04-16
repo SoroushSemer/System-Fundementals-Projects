@@ -204,6 +204,7 @@ int prog_delete(int min, int max)
             next->prev = prev;
             free_stmt(curr->value);
             free(curr);
+
             curr = prev;
         }
         else if (curr->value->lineno < min)
