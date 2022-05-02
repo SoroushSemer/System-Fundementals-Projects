@@ -22,7 +22,28 @@
  * thread and a new thread has been created to handle the connection.
  */
 // #if 0
-
+char *read_fd(int fd)
+{
+    int size = 0;
+    char *buf = malloc(1024);
+    size += read(fd, buf, 1024);
+    if (!size)
+    {
+        return NULL;
+    }
+    if (size < 1024)
+    {
+        return realloc(buf, size);
+    }
+    int read_bytes;
+    char s[1024];
+    while ((read_bytes = read(fd, s, 1024)) != 0)
+    {
+        size += read_bytes;
+        strcat(buf, s);
+    }
+    return realloc(buf, size);
+}
 void *pbx_client_service(void *arg)
 {
     // TO BE IMPLEMENTED
@@ -31,50 +52,71 @@ void *pbx_client_service(void *arg)
     free(arg);
     debug("client fd freed %d", *((int *)arg));
 
-    if (pthread_detach((client_fd) < 0))
+    // if (pthread_detach((client_fd) < 0))
+    // {
+    //     debug("detach failed!");
+    //     return NULL;
+    // }
+
+    TU *client_tu = tu_init(*client_fd);
+    if (!client_tu)
     {
-        debug("detach failed!");
+        debug("tu_init failed");
+        return NULL;
+    }
+    if (pbx_register(pbx, client_tu, *client_fd) < 0)
+    {
+        debug("pbx_register failed");
         return NULL;
     }
 
-    TU *client_tu = tu_init(*client_fd);
-
-    pbx_register(pbx, client_tu, *client_fd);
-
     for (;;)
     {
-        char buf[7];
-        read(*client_fd, buf, 4);
-        if (!strcmp(buf, tu_command_names[TU_DIAL_CMD]))
+        char *cmd = read_fd(*client_fd);
+        if (!cmd)
         {
-            debug("DIAL");
+            break;
         }
-        else if (!strcmp(buf, tu_command_names[TU_CHAT_CMD]))
+
+        char cmd4[5];
+        memcpy(cmd4, cmd, 4);
+        cmd4[4] = '\0';
+        char cmd6[7];
+        memcpy(cmd6, cmd, 6);
+        cmd6[6] = '\0';
+        if (!strcmp(cmd6, tu_command_names[TU_PICKUP_CMD]))
         {
-            debug("CHAT");
+            debug("PICKUP");
+            tu_pickup(client_tu);
         }
-        else if (!strcmp(buf, PICK) || !strcmp(buf, HANG))
+        else if (!strcmp(cmd6, tu_command_names[TU_HANGUP_CMD]))
         {
-            read(*client_fd, buf, 2);
-            if (!strcmp(buf, tu_command_names[TU_PICKUP_CMD]))
-            {
-                debug("PICKUP");
-            }
-            else
-            {
-                read(*client_fd, buf, 1);
-                if (!strcmp(buf, tu_command_names[TU_HANGUP_CMD]))
-                {
-                    debug("HANGUP");
-                }
-                else
-                {
-                    debug("INVALID CMD");
-                    return NULL;
-                }
-            }
+            debug("HANGUP");
+            tu_hangup(client_tu);
         }
+        else if (!strcmp(cmd4, tu_command_names[TU_DIAL_CMD]))
+        {
+            int ext;
+            strtok(cmd, " \t");
+            char *arg = strtok(NULL, EOL);
+            ext = atoi(arg);
+            debug("DIAL ext #%d", ext);
+            pbx_dial(pbx, client_tu, ext);
+        }
+        else if (!strcmp(cmd4, tu_command_names[TU_CHAT_CMD]))
+        {
+            strtok(cmd, " \t");
+            char *arg = strtok(NULL, EOL);
+            debug("CHAT %s", arg);
+            tu_chat(client_tu, arg);
+        }
+        else
+        {
+            debug("INVALID CMD");
+        }
+        free(cmd);
     }
+
     return NULL;
     // abort();
 }

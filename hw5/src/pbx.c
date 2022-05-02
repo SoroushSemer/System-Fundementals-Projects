@@ -2,21 +2,30 @@
  * PBX: simulates a Private Branch Exchange.
  */
 #include <stdlib.h>
-
+#include <semaphore.h>
+#include <sys/socket.h>
 #include "pbx.h"
 #include "debug.h"
 
+// #if 0
+struct pbx
+{
+    TU *tu[PBX_MAX_EXTENSIONS];
+    sem_t semaphore;
+};
 /*
  * Initialize a new PBX.
  *
  * @return the newly initialized PBX, or NULL if initialization fails.
  */
-#if 0
-PBX *pbx_init() {
+PBX *pbx_init()
+{
     // TO BE IMPLEMENTED
-    abort();
+    pbx = calloc(1, sizeof(PBX));
+    sem_init(&pbx->semaphore, 0, 1);
+    return pbx;
 }
-#endif
+// #endif
 
 /*
  * Shut down a pbx, shutting down all network connections, waiting for all server
@@ -28,12 +37,30 @@ PBX *pbx_init() {
  *
  * @param pbx  The PBX to be shut down.
  */
-#if 0
-void pbx_shutdown(PBX *pbx) {
+// #if 0
+void pbx_shutdown(PBX *pbx)
+{
+    sem_wait(&pbx->semaphore);
     // TO BE IMPLEMENTED
-    abort();
+    for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
+    {
+        TU *tu = pbx->tu[pos];
+        if (tu)
+        {
+            if (shutdown(tu_fileno(tu), SHUT_RDWR))
+            {
+                debug("shutdown fail");
+            }
+            pbx_unregister(pbx, tu);
+            free(tu);
+        }
+    }
+    sem_post(&pbx->semaphore);
+    sem_destroy(&pbx->semaphore);
+    free(pbx);
+    // abort();
 }
-#endif
+// #endif
 
 /*
  * Register a telephone unit with a PBX at a specified extension number.
@@ -49,12 +76,28 @@ void pbx_shutdown(PBX *pbx) {
  * @param ext  The extension number on which the TU is to be registered.
  * @return 0 if registration succeeds, otherwise -1.
  */
-#if 0
-int pbx_register(PBX *pbx, TU *tu, int ext) {
-    // TO BE IMPLEMENTED
-    abort();
+// #if 0
+int pbx_register(PBX *pbx, TU *tu, int ext)
+{
+    debug("Registering TU");
+    sem_wait(&pbx->semaphore);
+    for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
+    {
+        if (!pbx->tu[pos])
+        {
+            pbx->tu[pos] = tu;
+            tu_ref(pbx->tu[pos], "registering");
+            tu_set_extension(pbx->tu[pos], ext);
+            sem_post(&pbx->semaphore);
+
+            debug("TU registered");
+            return 0;
+        }
+    }
+    sem_post(&pbx->semaphore);
+    return -1;
 }
-#endif
+// #endif
 
 /*
  * Unregister a TU from a PBX.
@@ -68,12 +111,25 @@ int pbx_register(PBX *pbx, TU *tu, int ext) {
  * @param tu  The TU to be unregistered.
  * @return 0 if unregistration succeeds, otherwise -1.
  */
-#if 0
-int pbx_unregister(PBX *pbx, TU *tu) {
-    // TO BE IMPLEMENTED
-    abort();
+// #if 0
+int pbx_unregister(PBX *pbx, TU *tu)
+{
+    sem_wait(&pbx->semaphore);
+    for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
+    {
+        if (pbx->tu[pos] == tu)
+        {
+            tu_unref(pbx->tu[pos], "unregistering");
+            tu_set_extension(pbx->tu[pos], -1);
+            pbx->tu[pos] = NULL;
+            sem_post(&pbx->semaphore);
+            return 0;
+        }
+    }
+    sem_post(&pbx->semaphore);
+    return -1;
 }
-#endif
+// #endif
 
 /*
  * Use the PBX to initiate a call from a specified TU to a specified extension.
@@ -83,9 +139,19 @@ int pbx_unregister(PBX *pbx, TU *tu) {
  * @param ext  The extension number to be called.
  * @return 0 if dialing succeeds, otherwise -1.
  */
-#if 0
-int pbx_dial(PBX *pbx, TU *tu, int ext) {
-    // TO BE IMPLEMENTED
-    abort();
+// #if 0
+int pbx_dial(PBX *pbx, TU *tu, int ext)
+{
+    sem_wait(&pbx->semaphore);
+    for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
+    {
+        if (tu_extension(pbx->tu[pos]) == ext)
+        {
+            sem_post(&pbx->semaphore);
+            return tu_dial(tu, pbx->tu[pos]);
+        }
+    }
+    sem_post(&pbx->semaphore);
+    return -1;
 }
-#endif
+// #endif
