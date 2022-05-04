@@ -12,24 +12,21 @@
 #include "server.h"
 
 char *tu_state_names[] = {
-    [TU_ON_HOOK]       "ON HOOK",
-    [TU_RINGING]       "RINGING",
-    [TU_DIAL_TONE]     "DIAL TONE",
-    [TU_RING_BACK]     "RING BACK",
-    [TU_BUSY_SIGNAL]   "BUSY SIGNAL",
-    [TU_CONNECTED]     "CONNECTED",
-    [TU_ERROR]         "ERROR"
-};
+    [TU_ON_HOOK] "ON HOOK",
+    [TU_RINGING] "RINGING",
+    [TU_DIAL_TONE] "DIAL TONE",
+    [TU_RING_BACK] "RING BACK",
+    [TU_BUSY_SIGNAL] "BUSY SIGNAL",
+    [TU_CONNECTED] "CONNECTED",
+    [TU_ERROR] "ERROR"};
 
 char *tu_command_names[] = {
-    [TU_PICKUP_CMD]	"pickup",
-    [TU_HANGUP_CMD]	"hangup",
-    [TU_DIAL_CMD]	"dial",
-    [TU_CHAT_CMD]	"chat"
-};
+    [TU_PICKUP_CMD] "pickup",
+    [TU_HANGUP_CMD] "hangup",
+    [TU_DIAL_CMD] "dial",
+    [TU_CHAT_CMD] "chat"};
 
 /*
  * Object that maintains the state of the Private Branch Exchange (PBX).
  */
 PBX *pbx;
-
