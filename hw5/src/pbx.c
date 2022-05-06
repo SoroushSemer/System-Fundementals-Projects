@@ -23,8 +23,9 @@ PBX *pbx_init()
     debug("pbx_init");
     // TO BE IMPLEMENTED
     pbx = calloc(1, sizeof(PBX));
-    if (sem_init(&pbx->semaphore, 0, 1) < 0)
-        return NULL;
+    for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
+        pbx->tu[pos] = NULL;
+    sem_init(&pbx->semaphore, 0, 1);
     return pbx;
 }
 // #endif
@@ -43,8 +44,7 @@ PBX *pbx_init()
 void pbx_shutdown(PBX *pbx)
 {
     debug("pbx_shut");
-    if (sem_wait(&pbx->semaphore) < 0)
-        return;
+    sem_wait(&pbx->semaphore);
     // TO BE IMPLEMENTED
     for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
     {
@@ -59,13 +59,14 @@ void pbx_shutdown(PBX *pbx)
             if (pbx_unregister(pbx, tu) < 0)
             {
                 continue;
-            };
+            }
             sem_wait(&pbx->semaphore);
-            free(tu);
+            // free(tu);
         }
     }
     sem_post(&pbx->semaphore);
     sem_destroy(&pbx->semaphore);
+    debug("free here");
     free(pbx);
     // abort();
 }
@@ -98,9 +99,9 @@ int pbx_register(PBX *pbx, TU *tu, int ext)
     {
         if (!pbx->tu[pos])
         {
+            tu_set_extension(tu, ext);
             pbx->tu[pos] = tu;
             tu_ref(pbx->tu[pos], "registering");
-            tu_set_extension(pbx->tu[pos], ext);
             sem_post(&pbx->semaphore);
 
             debug("TU registered");
@@ -137,13 +138,11 @@ int pbx_unregister(PBX *pbx, TU *tu)
     {
         if (pbx->tu[pos] == tu)
         {
-            if (tu_hangup(tu) < 0)
-                continue;
+            tu_hangup(tu);
 
-            tu_unref(pbx->tu[pos], "unregistering");
-            // tu_set_extension(pbx->tu[pos], -1);
             pbx->tu[pos] = NULL;
-            close(tu_fileno(pbx->tu[pos]));
+            tu_unref(tu, "unregistering");
+            // tu_set_extension(pbx->tu[pos], -1);
             sem_post(&pbx->semaphore);
             return 0;
         }
@@ -179,7 +178,6 @@ int pbx_dial(PBX *pbx, TU *tu, int ext)
         }
     }
     debug("uh oh");
-
     sem_post(&pbx->semaphore);
     return -1;
 }

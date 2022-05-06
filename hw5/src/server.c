@@ -22,6 +22,7 @@
  * thread and a new thread has been created to handle the connection.
  */
 // #if 0
+pthread_mutex_t *mutex;
 char *read_fd(int fd)
 {
     int size = 0;
@@ -52,7 +53,13 @@ char *read_fd(int fd)
 }
 void *pbx_client_service(void *arg)
 {
+    if (!mutex)
+    {
+        mutex = calloc(1, sizeof(pthread_mutex_t));
+        pthread_mutex_init(mutex, NULL);
+    }
     // TO BE IMPLEMENTED
+    pthread_mutex_lock(mutex);
     int *client_fd = calloc(1, sizeof(int));
     *client_fd = *((int *)arg);
     free(arg);
@@ -73,12 +80,16 @@ void *pbx_client_service(void *arg)
     if (pbx_register(pbx, client_tu = tu_init(*client_fd), *client_fd) < 0)
     {
         debug("pbx_register failed");
+        pthread_mutex_unlock(mutex);
         return NULL;
     }
 
+    pthread_mutex_unlock(mutex);
     for (;;)
     {
         char *cmd = read_fd(*client_fd);
+        pthread_mutex_lock(mutex);
+        pthread_mutex_unlock(mutex);
         if (!cmd)
         {
             free(cmd);
@@ -144,8 +155,8 @@ void *pbx_client_service(void *arg)
         else
         {
             debug("INVALID CMD");
+            free(cmd);
         }
-        free(cmd);
     }
 
     debug("QUIT");

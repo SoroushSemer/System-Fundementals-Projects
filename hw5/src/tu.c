@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
-#include <fcntl.h>
 #include "pbx.h"
 #include "debug.h"
 // #include <errno.h>
@@ -76,65 +75,6 @@ void double_unlock(pthread_mutex_t *tu, pthread_mutex_t *tu2)
         pthread_mutex_unlock(tu2);
     }
 }
-// dprintf(tu->fileno, "%s", c);
-
-// if (tu->fileno == -1 || errno)
-// {
-//     debug("look i got here");
-//     return;
-// }
-// tu->state = state;
-// debug("look i got here1");
-// if (write(tu->fileno, tu_state_names[state], strlen(tu_state_names[state])) <= 0 || errno)
-// {
-//     debug("look i got here2");
-//     tu->state = TU_ERROR;
-//     return;
-// }
-// debug("look i got here3: %s, ext %d", tu_state_names[tu->state], tu->ext);
-// if (tu->state == TU_CONNECTED)
-// {
-//     if (write(tu->fileno, SPACE, strlen(SPACE)) <= 0 || errno)
-//     {
-//         tu->state = TU_ERROR;
-//         debug("look i got here2");
-//         return;
-//     }
-//     char c[PBX_MAX_EXTENSIONS];
-//     snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->peer->ext);
-//     if (write(tu->fileno, c, strlen(c)) <= 0 || errno)
-//     {
-//         debug("look i got here2");
-//         tu->state = TU_ERROR;
-//         return;
-//     }
-// }
-// else if (tu->state == TU_ON_HOOK)
-// {
-//     debug("look i got here4: %s, ext %d", tu_state_names[tu->state], tu->ext);
-//     if (write(tu->fileno, SPACE, strlen(SPACE)) <= 0 || errno)
-//     {
-//         debug("look i got here2");
-//         tu->state = TU_ERROR;
-//         return;
-//     }
-//     debug("look i got here5");
-//     char c[PBX_MAX_EXTENSIONS];
-//     snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->ext);
-//     if (write(tu->fileno, c, strlen(c)) <= 0 || errno)
-//     {
-//         debug("look i got here2");
-//         tu->state = TU_ERROR;
-//         return;
-//     }
-//     debug("look i got here6");
-// }
-// if (write(tu->fileno, EOL, strlen(EOL)) <= 0 || errno)
-// {
-//     debug("look i got here2");
-//     tu->state = TU_ERROR;
-//     return;
-// }
 
 /*
  * Initialize a TU
@@ -148,12 +88,12 @@ void double_unlock(pthread_mutex_t *tu, pthread_mutex_t *tu2)
 TU *tu_init(int fd)
 {
     debug("tu_init");
-    TU *tu = malloc(sizeof(TU));
+    TU *tu = calloc(1, sizeof(TU));
     tu->fileno = tu->ext = fd;
-    tu->ref = 0;
-    set_state(tu, TU_ON_HOOK);
-
+    // tu->ref = 0;
     pthread_mutex_init(&tu->mutex, NULL);
+    set_state(tu, TU_ON_HOOK);
+    // tu->state = TU_ON_HOOK;
     // pthread_mutex_lock(&tu->mutex);
     // pthread_mutex_unlock(&tu->mutex);
     return tu;
@@ -171,12 +111,10 @@ TU *tu_init(int fd)
 void tu_ref(TU *tu, char *reason)
 {
     debug("tu_ref: %s", reason);
-    if (!tu)
-    {
-        return;
-    }
-    // TO BE IMPLEMENTED
-    // abort();
+    // if (!tu)
+    // {
+    //     return;
+    // }
     pthread_mutex_lock(&tu->mutex);
     tu->ref++;
     pthread_mutex_unlock(&tu->mutex);
@@ -195,18 +133,18 @@ void tu_ref(TU *tu, char *reason)
 void tu_unref(TU *tu, char *reason)
 {
     debug("tu_unref: %s", reason);
-    if (!tu)
-    {
-        return;
-    }
-    // TO BE IMPLEMENTED
-    // abort();
+    // if (!tu)
+    // {
+    //     return;
+    // }
     pthread_mutex_lock(&tu->mutex);
     tu->ref--;
-    if (!tu->ref)
+    if (tu->ref <= 0)
     {
-        // pthread_mutex_unlock(&tu->mutex);
+        pthread_mutex_unlock(&tu->mutex);
         pthread_mutex_destroy(&tu->mutex);
+        debug("free here");
+        // close(tu_fileno(tu));
         free(tu);
         return;
     }
@@ -229,11 +167,18 @@ void tu_unref(TU *tu, char *reason)
 int tu_fileno(TU *tu)
 {
     debug("tu_fileno");
-    if (!tu)
-    {
-        return -1;
-    }
-    return tu->fileno;
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
+    // pthread_mutex_lock(&tu->mutex);
+    int fd;
+    if (tu->fileno)
+        fd = tu->fileno;
+    else
+        fd = -1;
+    // pthread_mutex_unlock(&tu->mutex);
+    return fd;
 }
 // #endif
 
@@ -258,7 +203,9 @@ int tu_extension(TU *tu)
     int e = tu->ext;
     debug("tu_ext %d", e);
     // pthread_mutex_unlock(&tu->mutex);
-    return e;
+    if (e)
+        return e;
+    return -1;
 }
 // #endif
 
@@ -277,9 +224,9 @@ int tu_set_extension(TU *tu, int ext)
     // {
     //     return -1;
     // }
-    pthread_mutex_lock(&tu->mutex);
+    // pthread_mutex_lock(&tu->mutex);
     tu->ext = ext;
-    pthread_mutex_unlock(&tu->mutex);
+    // pthread_mutex_unlock(&tu->mutex);
     return 0;
 }
 // #endif
@@ -322,8 +269,6 @@ int tu_dial(TU *tu, TU *target)
     // {
     //     return -1;
     // }
-    // TO BE IMPLEMENTED
-    // abort();
     pthread_mutex_lock(&tu->mutex);
     if (tu->state != TU_DIAL_TONE)
     {
@@ -337,15 +282,17 @@ int tu_dial(TU *tu, TU *target)
         return -1;
     }
 
-    pthread_mutex_unlock(&tu->mutex);
-    // pthread_mutex_lock(&target->mutex);
-    double_lock(&tu->mutex, &target->mutex);
     if (tu == target)
     {
         set_state(tu, TU_BUSY_SIGNAL);
         // tu->state = TU_BUSY_SIGNAL;
+        pthread_mutex_unlock(&tu->mutex);
+        return 0;
     }
-    else if (tu->peer || target->state != TU_ON_HOOK)
+    pthread_mutex_unlock(&tu->mutex);
+    // pthread_mutex_lock(&target->mutex);
+    double_lock(&tu->mutex, &target->mutex);
+    if (tu->peer || target->state != TU_ON_HOOK)
     {
         // if (tu->peer)
         //     debug("busy %d", tu->ext);
@@ -362,10 +309,11 @@ int tu_dial(TU *tu, TU *target)
         set_state(target, TU_RINGING);
         // pthread_mutex_unlock(&target->mutex);
         // pthread_mutex_unlock(&tu->mutex);
-
+        tu->ref++;
+        target->ref++;
         double_unlock(&tu->mutex, &target->mutex);
-        tu_ref(tu, "dialing");
-        tu_ref(target, "ringing");
+        // tu_ref(tu, "dialing");
+        // tu_ref(target, "ringing");
         return 0;
     }
     // pthread_mutex_unlock(&target->mutex);
@@ -462,8 +410,6 @@ int tu_pickup(TU *tu)
 int tu_hangup(TU *tu)
 {
     debug("tu_hangup");
-    // TO BE IMPLEMENTED
-    // abort();
     // if (!tu)
     // {
     //     return -1;
@@ -478,18 +424,19 @@ int tu_hangup(TU *tu)
         //     set_state(tu, TU_ERROR);
         //     return -1;
         // }
+        TU *peer = tu->peer;
         pthread_mutex_unlock(&tu->mutex);
         // pthread_mutex_lock(&tu->peer->mutex);
-        TU *peer = tu->peer;
         double_lock(&tu->mutex, &peer->mutex);
         set_state(tu->peer, TU_DIAL_TONE);
         peer->peer = NULL;
         tu->peer = NULL;
-        // pthread_mutex_unlock(&peer->mutex);
-        // pthread_mutex_unlock(&tu->mutex);
+
+        pthread_mutex_unlock(&peer->mutex);
+        pthread_mutex_unlock(&tu->mutex);
         double_unlock(&tu->mutex, &peer->mutex);
-        tu_unref(peer, "HANGING UP");
-        tu_unref(tu, "HANGING UP");
+        // tu_unref(peer, "HANGING UP");***********************************
+        // tu_unref(tu, "HANGING UP");
         return 0;
     }
     else if (tu->state == TU_RING_BACK)
@@ -500,18 +447,18 @@ int tu_hangup(TU *tu)
         //     set_state(tu, TU_ERROR);
         //     return -1;
         // }
+        TU *peer = tu->peer;
         pthread_mutex_unlock(&tu->mutex);
         // pthread_mutex_lock(&tu->peer->mutex);
-        TU *peer = tu->peer;
         double_lock(&tu->mutex, &peer->mutex);
         set_state(tu->peer, TU_ON_HOOK);
         peer->peer = NULL;
         tu->peer = NULL;
-        // pthread_mutex_unlock(&peer->mutex);
-        // pthread_mutex_unlock(&tu->mutex);
+        pthread_mutex_unlock(&peer->mutex);
+        pthread_mutex_unlock(&tu->mutex);
         double_unlock(&tu->mutex, &peer->mutex);
-        tu_unref(peer, "HANGING UP");
-        tu_unref(tu, "HANGING UP");
+        // tu_unref(peer, "HANGING UP");
+        // tu_unref(tu, "HANGING UP");*************************************
         return 0;
     }
     else if (tu->state == TU_DIAL_TONE || tu->state == TU_BUSY_SIGNAL || tu->state == TU_ERROR)
