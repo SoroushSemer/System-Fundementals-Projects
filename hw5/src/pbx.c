@@ -143,6 +143,7 @@ int pbx_unregister(PBX *pbx, TU *tu)
             tu_unref(pbx->tu[pos], "unregistering");
             // tu_set_extension(pbx->tu[pos], -1);
             pbx->tu[pos] = NULL;
+            close(tu_fileno(pbx->tu[pos]));
             sem_post(&pbx->semaphore);
             return 0;
         }
