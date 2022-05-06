@@ -27,10 +27,10 @@ char *read_fd(int fd)
     int size = 0;
     char *buf = malloc(1024);
     int r = read(fd, buf, 1024);
-    if (r < 0)
-    {
-        return NULL;
-    }
+    // if (r < 0)
+    // {
+    //     return NULL;
+    // }
     size += r;
 
     if (!size)
@@ -64,13 +64,13 @@ void *pbx_client_service(void *arg)
     //     return NULL;
     // }
 
-    TU *client_tu = tu_init(*client_fd);
-    if (!client_tu)
-    {
-        debug("tu_init failed");
-        return NULL;
-    }
-    if (pbx_register(pbx, client_tu, *client_fd) < 0)
+    TU *client_tu;
+    // if (!client_tu)
+    // {
+    //     debug("tu_init failed");
+    //     return NULL;
+    // }
+    if (pbx_register(pbx, client_tu = tu_init(*client_fd), *client_fd) < 0)
     {
         debug("pbx_register failed");
         return NULL;
@@ -81,47 +81,65 @@ void *pbx_client_service(void *arg)
         char *cmd = read_fd(*client_fd);
         if (!cmd)
         {
-            return NULL;
+            free(cmd);
+            break;
         }
 
-        char cmd4[5];
-        memcpy(cmd4, cmd, 4);
-        cmd4[4] = '\0';
-        char cmd6[7];
-        memcpy(cmd6, cmd, 6);
-        cmd6[6] = '\0';
-        if (!strcmp(cmd6, tu_command_names[TU_PICKUP_CMD]))
+        if (strlen(cmd) > 7)
         {
-            if (cmd[6] == '\r' && cmd[7] == '\n')
+            char cmd6[7];
+            memcpy(cmd6, cmd, 6);
+            cmd6[6] = '\0';
+            if (!strcmp(cmd6, tu_command_names[TU_PICKUP_CMD]))
             {
-                debug("PICKUP");
-                tu_pickup(client_tu);
+                if (cmd[6] == '\r' && cmd[7] == '\n')
+                {
+                    debug("PICKUP");
+                    tu_pickup(client_tu);
+                }
+                free(cmd);
+                continue;
+            }
+            else if (!strcmp(cmd6, tu_command_names[TU_HANGUP_CMD]))
+            {
+                if (cmd[6] == '\r' && cmd[7] == '\n')
+                {
+                    debug("HANGUP");
+                    tu_hangup(client_tu);
+                    free(cmd);
+                    continue;
+                }
             }
         }
-        else if (!strcmp(cmd6, tu_command_names[TU_HANGUP_CMD]))
+        if (strlen(cmd) > 5)
         {
-            if (cmd[6] == '\r' && cmd[7] == '\n')
+            char cmd4[5];
+            memcpy(cmd4, cmd, 4);
+            cmd4[4] = '\0';
+            if (!strcmp(cmd4, tu_command_names[TU_DIAL_CMD]))
             {
-                debug("HANGUP");
-                tu_hangup(client_tu);
+                int ext;
+                strtok(cmd, " \t");
+                char *arg = strtok(NULL, EOL);
+                char *end;
+                ext = strtol(arg, &end, 10);
+                if (*end != '\0')
+                    continue;
+                // ext = atoi(arg);
+                debug("DIAL ext #%d", ext);
+                pbx_dial(pbx, client_tu, ext);
+                free(cmd);
+                continue;
             }
-        }
-        else if (!strcmp(cmd4, tu_command_names[TU_DIAL_CMD]))
-        {
-            int ext;
-            strtok(cmd, " \t");
-            char *arg = strtok(NULL, EOL);
-
-            ext = atoi(arg);
-            debug("DIAL ext #%d", ext);
-            pbx_dial(pbx, client_tu, ext);
-        }
-        else if (!strcmp(cmd4, tu_command_names[TU_CHAT_CMD]))
-        {
-            strtok(cmd, " \t");
-            char *arg = strtok(NULL, EOL);
-            debug("CHAT %s", arg);
-            tu_chat(client_tu, arg);
+            else if (!strcmp(cmd4, tu_command_names[TU_CHAT_CMD]))
+            {
+                strtok(cmd, " \t");
+                char *arg = strtok(NULL, EOL);
+                debug("CHAT %s", arg);
+                tu_chat(client_tu, arg);
+                free(cmd);
+                continue;
+            }
         }
         else
         {
@@ -129,11 +147,15 @@ void *pbx_client_service(void *arg)
         }
         free(cmd);
     }
+
     debug("QUIT");
-    if (pbx_unregister(pbx, client_tu) < 0)
+    if (client_tu)
     {
-        debug("pbx_unregister failed");
-        return NULL;
+        if (pbx_unregister(pbx, client_tu) < 0)
+        {
+            debug("pbx_unregister failed");
+            return NULL;
+        }
     }
     return NULL;
     // abort();
