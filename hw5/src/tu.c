@@ -90,10 +90,10 @@ TU *tu_init(int fd)
     debug("tu_init");
     TU *tu = calloc(1, sizeof(TU));
     tu->fileno = tu->ext = fd;
-    // tu->ref = 0;
+    tu->ref = 0;
+    tu->peer = NULL;
+    tu->state = TU_ON_HOOK;
     pthread_mutex_init(&tu->mutex, NULL);
-    set_state(tu, TU_ON_HOOK);
-    // tu->state = TU_ON_HOOK;
     // pthread_mutex_lock(&tu->mutex);
     // pthread_mutex_unlock(&tu->mutex);
     return tu;
@@ -116,7 +116,7 @@ void tu_ref(TU *tu, char *reason)
     //     return;
     // }
     pthread_mutex_lock(&tu->mutex);
-    tu->ref++;
+    (tu->ref)++;
     pthread_mutex_unlock(&tu->mutex);
     return;
 }
@@ -138,8 +138,8 @@ void tu_unref(TU *tu, char *reason)
     //     return;
     // }
     pthread_mutex_lock(&tu->mutex);
-    tu->ref--;
-    if (tu->ref <= 0)
+    (tu->ref)--;
+    if (tu->ref == 0)
     {
         pthread_mutex_unlock(&tu->mutex);
         pthread_mutex_destroy(&tu->mutex);
@@ -171,13 +171,13 @@ int tu_fileno(TU *tu)
     // {
     //     return -1;
     // }
-    // pthread_mutex_lock(&tu->mutex);
+    pthread_mutex_lock(&tu->mutex);
     int fd;
     if (tu->fileno)
         fd = tu->fileno;
     else
         fd = -1;
-    // pthread_mutex_unlock(&tu->mutex);
+    pthread_mutex_unlock(&tu->mutex);
     return fd;
 }
 // #endif
@@ -199,10 +199,10 @@ int tu_extension(TU *tu)
     {
         return -1;
     }
-    // pthread_mutex_lock(&tu->mutex);
+    pthread_mutex_lock(&tu->mutex);
     int e = tu->ext;
     debug("tu_ext %d", e);
-    // pthread_mutex_unlock(&tu->mutex);
+    pthread_mutex_unlock(&tu->mutex);
     if (e)
         return e;
     return -1;
@@ -220,13 +220,15 @@ int tu_extension(TU *tu)
 int tu_set_extension(TU *tu, int ext)
 {
     debug("tu_set_ext");
-    // if (!tu)
-    // {
-    //     return -1;
-    // }
-    // pthread_mutex_lock(&tu->mutex);
+    if (!tu)
+    {
+        return -1;
+    }
+    pthread_mutex_lock(&tu->mutex);
     tu->ext = ext;
-    // pthread_mutex_unlock(&tu->mutex);
+
+    set_state(tu, tu->state);
+    pthread_mutex_unlock(&tu->mutex);
     return 0;
 }
 // #endif
@@ -265,10 +267,10 @@ int tu_set_extension(TU *tu, int ext)
 int tu_dial(TU *tu, TU *target)
 {
     debug("tu_dial");
-    // if (!tu)
-    // {
-    //     return -1;
-    // }
+    if (!tu)
+    {
+        return -1;
+    }
     pthread_mutex_lock(&tu->mutex);
     if (tu->state != TU_DIAL_TONE)
     {
