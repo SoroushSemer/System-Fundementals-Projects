@@ -50,7 +50,10 @@ int main(int argc, char *argv[])
     // Perform required initialization of the PBX module.
     debug("Initializing PBX...");
     pbx = pbx_init();
-
+    if (!pbx)
+    {
+        return -1;
+    }
     // TODO: Set up the server socket and enter a loop to accept connections
     // on this socket.  For each connection, a thread should be started to
     // run function pbx_client_service().  In addition, you should install

@@ -26,7 +26,13 @@ char *read_fd(int fd)
 {
     int size = 0;
     char *buf = malloc(1024);
-    size += read(fd, buf, 1024);
+    int r = read(fd, buf, 1024);
+    if (r < 0)
+    {
+        return NULL;
+    }
+    size += r;
+
     if (!size)
     {
         return NULL;
@@ -75,7 +81,7 @@ void *pbx_client_service(void *arg)
         char *cmd = read_fd(*client_fd);
         if (!cmd)
         {
-            break;
+            return NULL;
         }
 
         char cmd4[5];
@@ -86,19 +92,26 @@ void *pbx_client_service(void *arg)
         cmd6[6] = '\0';
         if (!strcmp(cmd6, tu_command_names[TU_PICKUP_CMD]))
         {
-            debug("PICKUP");
-            tu_pickup(client_tu);
+            if (cmd[6] == '\r' && cmd[7] == '\n')
+            {
+                debug("PICKUP");
+                tu_pickup(client_tu);
+            }
         }
         else if (!strcmp(cmd6, tu_command_names[TU_HANGUP_CMD]))
         {
-            debug("HANGUP");
-            tu_hangup(client_tu);
+            if (cmd[6] == '\r' && cmd[7] == '\n')
+            {
+                debug("HANGUP");
+                tu_hangup(client_tu);
+            }
         }
         else if (!strcmp(cmd4, tu_command_names[TU_DIAL_CMD]))
         {
             int ext;
             strtok(cmd, " \t");
             char *arg = strtok(NULL, EOL);
+
             ext = atoi(arg);
             debug("DIAL ext #%d", ext);
             pbx_dial(pbx, client_tu, ext);
@@ -116,7 +129,12 @@ void *pbx_client_service(void *arg)
         }
         free(cmd);
     }
-
+    debug("QUIT");
+    if (pbx_unregister(pbx, client_tu) < 0)
+    {
+        debug("pbx_unregister failed");
+        return NULL;
+    }
     return NULL;
     // abort();
 }

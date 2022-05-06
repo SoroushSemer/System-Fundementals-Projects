@@ -5,9 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <fcntl.h>
 #include "pbx.h"
 #include "debug.h"
-
+#include <errno.h>
 // #if 0
 #define CHAT "CHAT"
 #define SPACE " "
@@ -24,23 +25,87 @@ struct tu
 
 void set_state(TU *tu, TU_STATE state)
 {
+    // if (!tu)
+    // {
+    //     return;
+    // }
     tu->state = state;
-    write(tu->fileno, tu_state_names[state], strlen(tu_state_names[state]));
+    char c[PBX_MAX_EXTENSIONS + 7];
     if (tu->state == TU_CONNECTED)
     {
-        write(tu->fileno, SPACE, strlen(SPACE));
-        char c[PBX_MAX_EXTENSIONS];
-        snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->peer->ext);
-        write(tu->fileno, c, strlen(c));
+        snprintf(c, PBX_MAX_EXTENSIONS + 7, "%s %d%s", tu_state_names[tu->state], tu->peer->ext, EOL);
     }
     else if (tu->state == TU_ON_HOOK)
     {
-        write(tu->fileno, SPACE, strlen(SPACE));
-        char c[PBX_MAX_EXTENSIONS];
-        snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->ext);
-        write(tu->fileno, c, strlen(c));
+        snprintf(c, PBX_MAX_EXTENSIONS + 7, "%s %d%s", tu_state_names[tu->state], tu->ext, EOL);
     }
-    write(tu->fileno, EOL, strlen(EOL));
+    else
+    {
+        snprintf(c, PBX_MAX_EXTENSIONS + 7, "%s%s", tu_state_names[tu->state], EOL);
+    }
+    if (write(tu->fileno, c, strlen(c)) <= 0)
+    {
+        debug("look i got here2");
+        tu->state = TU_ERROR;
+        return;
+    }
+    // if (tu->fileno == -1 || errno)
+    // {
+    //     debug("look i got here");
+    //     return;
+    // }
+    // tu->state = state;
+    // debug("look i got here1");
+    // if (write(tu->fileno, tu_state_names[state], strlen(tu_state_names[state])) <= 0 || errno)
+    // {
+    //     debug("look i got here2");
+    //     tu->state = TU_ERROR;
+    //     return;
+    // }
+    // debug("look i got here3: %s, ext %d", tu_state_names[tu->state], tu->ext);
+    // if (tu->state == TU_CONNECTED)
+    // {
+    //     if (write(tu->fileno, SPACE, strlen(SPACE)) <= 0 || errno)
+    //     {
+    //         tu->state = TU_ERROR;
+    //         debug("look i got here2");
+    //         return;
+    //     }
+    //     char c[PBX_MAX_EXTENSIONS];
+    //     snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->peer->ext);
+    //     if (write(tu->fileno, c, strlen(c)) <= 0 || errno)
+    //     {
+    //         debug("look i got here2");
+    //         tu->state = TU_ERROR;
+    //         return;
+    //     }
+    // }
+    // else if (tu->state == TU_ON_HOOK)
+    // {
+    //     debug("look i got here4: %s, ext %d", tu_state_names[tu->state], tu->ext);
+    //     if (write(tu->fileno, SPACE, strlen(SPACE)) <= 0 || errno)
+    //     {
+    //         debug("look i got here2");
+    //         tu->state = TU_ERROR;
+    //         return;
+    //     }
+    //     debug("look i got here5");
+    //     char c[PBX_MAX_EXTENSIONS];
+    //     snprintf(c, PBX_MAX_EXTENSIONS, "%d", tu->ext);
+    //     if (write(tu->fileno, c, strlen(c)) <= 0 || errno)
+    //     {
+    //         debug("look i got here2");
+    //         tu->state = TU_ERROR;
+    //         return;
+    //     }
+    //     debug("look i got here6");
+    // }
+    // if (write(tu->fileno, EOL, strlen(EOL)) <= 0 || errno)
+    // {
+    //     debug("look i got here2");
+    //     tu->state = TU_ERROR;
+    //     return;
+    // }
 }
 
 /*
@@ -74,12 +139,16 @@ TU *tu_init(int fd)
 // #if 0
 void tu_ref(TU *tu, char *reason)
 {
+    debug("tu_ref: %s", reason);
+    // if (!tu)
+    // {
+    //     return;
+    // }
     // TO BE IMPLEMENTED
     // abort();
     pthread_mutex_lock(&tu->mutex);
     tu->ref++;
     pthread_mutex_unlock(&tu->mutex);
-    debug("tu_ref: %s", reason);
     return;
 }
 // #endif
@@ -94,6 +163,11 @@ void tu_ref(TU *tu, char *reason)
 // #if 0
 void tu_unref(TU *tu, char *reason)
 {
+    debug("tu_unref: %s", reason);
+    // if (!tu)
+    // {
+    //     return;
+    // }
     // TO BE IMPLEMENTED
     // abort();
     pthread_mutex_lock(&tu->mutex);
@@ -107,7 +181,6 @@ void tu_unref(TU *tu, char *reason)
     }
     pthread_mutex_unlock(&tu->mutex);
 
-    debug("tu_unref: %s", reason);
     return;
 }
 // #endif
@@ -125,6 +198,10 @@ void tu_unref(TU *tu, char *reason)
 int tu_fileno(TU *tu)
 {
     debug("tu_fileno");
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
     return tu->fileno;
 }
 // #endif
@@ -142,6 +219,10 @@ int tu_fileno(TU *tu)
 // #if 0
 int tu_extension(TU *tu)
 {
+    if (!tu)
+    {
+        return -1;
+    }
     debug("tu_ext");
     // pthread_mutex_lock(&tu->mutex);
     int ext = tu->ext;
@@ -161,6 +242,10 @@ int tu_extension(TU *tu)
 int tu_set_extension(TU *tu, int ext)
 {
     debug("tu_set_ext");
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
     // pthread_mutex_lock(&tu->mutex);
     tu->ext = ext;
     // pthread_mutex_unlock(&tu->mutex);
@@ -202,30 +287,35 @@ int tu_set_extension(TU *tu, int ext)
 int tu_dial(TU *tu, TU *target)
 {
     debug("tu_dial");
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
     // TO BE IMPLEMENTED
     // abort();
     pthread_mutex_lock(&tu->mutex);
-    pthread_mutex_lock(&target->mutex);
     if (tu->state != TU_DIAL_TONE)
     {
-        pthread_mutex_unlock(&target->mutex);
         pthread_mutex_unlock(&tu->mutex);
         return 0;
     }
     if (!target)
     {
         set_state(tu, TU_ERROR);
-        pthread_mutex_unlock(&target->mutex);
         pthread_mutex_unlock(&tu->mutex);
         return -1;
     }
-    else if (tu == target)
+
+    pthread_mutex_lock(&target->mutex);
+    if (tu == target)
     {
         set_state(tu, TU_BUSY_SIGNAL);
         // tu->state = TU_BUSY_SIGNAL;
     }
     else if (tu->peer || target->state != TU_ON_HOOK)
     {
+        // if (tu->peer)
+        //     debug("busy %d", tu->ext);
         set_state(tu, TU_BUSY_SIGNAL);
         // tu->state = TU_BUSY_SIGNAL;
     }
@@ -272,7 +362,10 @@ int tu_pickup(TU *tu)
     debug("tu_pickup");
     // TO BE IMPLEMENTED
     // abort();
-
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
     pthread_mutex_lock(&tu->mutex);
     // if (tu->state != TU_RINGING && tu->state != TU_ON_HOOK)
     // {
@@ -327,11 +420,20 @@ int tu_hangup(TU *tu)
     debug("tu_hangup");
     // TO BE IMPLEMENTED
     // abort();
-
+    // if (!tu)
+    // {
+    //     return -1;
+    // }
     pthread_mutex_lock(&tu->mutex);
     if (tu->state == TU_CONNECTED || tu->state == TU_RINGING)
     {
+        debug("set state on hook");
         set_state(tu, TU_ON_HOOK);
+        // if (!tu->peer)
+        // {
+        //     set_state(tu, TU_ERROR);
+        //     return -1;
+        // }
         pthread_mutex_lock(&tu->peer->mutex);
         TU *peer = tu->peer;
         set_state(tu->peer, TU_DIAL_TONE);
@@ -339,20 +441,26 @@ int tu_hangup(TU *tu)
         tu->peer = NULL;
         pthread_mutex_unlock(&peer->mutex);
         pthread_mutex_unlock(&tu->mutex);
-        tu_unref(tu->peer, "HANGING UP");
+        tu_unref(peer, "HANGING UP");
         tu_unref(tu, "HANGING UP");
         return 0;
     }
     else if (tu->state == TU_RING_BACK)
     {
         set_state(tu, TU_ON_HOOK);
+        // if (!tu->peer)
+        // {
+        //     set_state(tu, TU_ERROR);
+        //     return -1;
+        // }
         pthread_mutex_lock(&tu->peer->mutex);
+        TU *peer = tu->peer;
         set_state(tu->peer, TU_ON_HOOK);
-        tu->peer->peer = NULL;
+        peer->peer = NULL;
         tu->peer = NULL;
-        pthread_mutex_unlock(&tu->peer->mutex);
+        pthread_mutex_unlock(&peer->mutex);
         pthread_mutex_unlock(&tu->mutex);
-        tu_unref(tu->peer, "HANGING UP");
+        tu_unref(peer, "HANGING UP");
         tu_unref(tu, "HANGING UP");
         return 0;
     }
@@ -391,6 +499,11 @@ int tu_chat(TU *tu, char *msg)
     {
         set_state(tu, tu->state);
         pthread_mutex_unlock(&tu->mutex);
+        return -1;
+    }
+    if (!tu->peer)
+    {
+        set_state(tu, TU_ERROR);
         return -1;
     }
     pthread_mutex_lock(&tu->peer->mutex);

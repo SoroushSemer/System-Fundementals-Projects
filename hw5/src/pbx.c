@@ -22,7 +22,8 @@ PBX *pbx_init()
 {
     // TO BE IMPLEMENTED
     pbx = calloc(1, sizeof(PBX));
-    sem_init(&pbx->semaphore, 0, 1);
+    if (sem_init(&pbx->semaphore, 0, 1) < 0)
+        return NULL;
     return pbx;
 }
 // #endif
@@ -40,7 +41,8 @@ PBX *pbx_init()
 // #if 0
 void pbx_shutdown(PBX *pbx)
 {
-    sem_wait(&pbx->semaphore);
+    if (sem_wait(&pbx->semaphore) < 0)
+        return;
     // TO BE IMPLEMENTED
     for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
     {
@@ -51,7 +53,10 @@ void pbx_shutdown(PBX *pbx)
             {
                 debug("shutdown fail");
             }
-            pbx_unregister(pbx, tu);
+            if (pbx_unregister(pbx, tu) < 0)
+            {
+                continue;
+            };
             free(tu);
         }
     }
@@ -79,6 +84,10 @@ void pbx_shutdown(PBX *pbx)
 // #if 0
 int pbx_register(PBX *pbx, TU *tu, int ext)
 {
+    if (!pbx || !tu)
+    {
+        return -1;
+    }
     debug("Registering TU");
     sem_wait(&pbx->semaphore);
     for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
@@ -87,7 +96,8 @@ int pbx_register(PBX *pbx, TU *tu, int ext)
         {
             pbx->tu[pos] = tu;
             tu_ref(pbx->tu[pos], "registering");
-            tu_set_extension(pbx->tu[pos], ext);
+            if (tu_set_extension(pbx->tu[pos], ext) < 0)
+                continue;
             sem_post(&pbx->semaphore);
 
             debug("TU registered");
@@ -114,13 +124,19 @@ int pbx_register(PBX *pbx, TU *tu, int ext)
 // #if 0
 int pbx_unregister(PBX *pbx, TU *tu)
 {
+    if (!pbx || !tu)
+    {
+        return -1;
+    }
     sem_wait(&pbx->semaphore);
     for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
     {
         if (pbx->tu[pos] == tu)
         {
+            if (tu_hangup(tu) < 0)
+                continue;
             tu_unref(pbx->tu[pos], "unregistering");
-            tu_set_extension(pbx->tu[pos], -1);
+            // tu_set_extension(pbx->tu[pos], -1);
             pbx->tu[pos] = NULL;
             sem_post(&pbx->semaphore);
             return 0;
@@ -142,9 +158,12 @@ int pbx_unregister(PBX *pbx, TU *tu)
 // #if 0
 int pbx_dial(PBX *pbx, TU *tu, int ext)
 {
+    if (!pbx || !tu)
+        return -1;
     sem_wait(&pbx->semaphore);
     for (int pos = 0; pos < PBX_MAX_EXTENSIONS; pos++)
     {
+
         if (tu_extension(pbx->tu[pos]) == ext)
         {
             sem_post(&pbx->semaphore);
