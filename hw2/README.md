@@ -8,7 +8,8 @@ The original program contained multiple bugs which I have fixed.
 The goal for this project was to develop an understanding of debugging tools such as ```gdb``` and ```valgrind```, to learn about C memory management, and work with files and the C standard I/O library.
 
 ```
-USAGE: bin/par [--version] [-w WIDTH | --width WIDTH] [-p PREFIX | --prefix PREFIX] [-s SUFFIX | --suffix SUFFIX] [-h HANG | --hang HANG] [-l LAST | --last | --no-last] [-m MIN | --min | --no-min]
+USAGE: bin/par [--version] [-w WIDTH | --width WIDTH] [-p PREFIX | --prefix PREFIX] [-s SUFFIX | --suffix SUFFIX] [-h HANG | --hang HANG]
+                [-l LAST | --last | --no-last] [-m MIN | --min | --no-min]
 
 --version (long form only):
 Print the version number of the program.
