@@ -4,7 +4,8 @@
 
 The goal of this project was to familiarize myself with File I/O, Bitwise Manipulations, and Use of Pointers in C.
 
-```USAGE: bin/argo [-h] [-c|-v] [-p|-p INDENT]
+```
+USAGE: bin/argo [-h] [-c|-v] [-p|-p INDENT]
    -h       Help: displays this help menu.
    -v       Validate: the program reads from standard input and checks whether
             it is syntactically correct JSON.  If there is any error, then a message
@@ -21,4 +22,5 @@ The goal of this project was to familiarize myself with File I/O, Bitwise Manipu
             The INDENT is an optional nonnegative integer argument that specifies the
             number of additional spaces to be output at the beginning of a line for each
             for each increase in indentation level.  If no value is specified, then a
-            default value of 4 is used.```
+            default value of 4 is used.
+   ```
