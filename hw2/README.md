@@ -11,29 +11,29 @@ The goal for this project was to develop an understanding of debugging tools suc
 USAGE: bin/par [--version] [-w WIDTH | --width WIDTH] [-p PREFIX | --prefix PREFIX] [-s SUFFIX | --suffix SUFFIX] 
                 [-h HANG | --hang HANG] [-l LAST | --last | --no-last] [-m MIN | --min | --no-min]
 
---version (long form only):
-Print the version number of the program.
+    --version (long form only):
+    Print the version number of the program.
 
--w WIDTH (short form) or --width WIDTH (long form):
-Set the output paragraph width to WIDTH.
+    -w WIDTH (short form) or --width WIDTH (long form):
+    Set the output paragraph width to WIDTH.
 
--p PREFIX (short form) or --prefix PREFIX (long form):
-Set the value of the "prefix" parameter to PREFIX.
+    -p PREFIX (short form) or --prefix PREFIX (long form):
+    Set the value of the "prefix" parameter to PREFIX.
 
--s SUFFIX (short form) or --suffix SUFFIX (long form):
-Set the value of the "suffix" parameter to SUFFIX.
+    -s SUFFIX (short form) or --suffix SUFFIX (long form):
+    Set the value of the "suffix" parameter to SUFFIX.
 
--h HANG (short form) or --hang HANG (long form):
-Set the value of the "hang" parameter to HANG.
+    -h HANG (short form) or --hang HANG (long form):
+    Set the value of the "hang" parameter to HANG.
 
--l LAST (short form) or either --last or
---no-last (long form):
-Set the value of the boolean "last" parameter.
-For the short form, the values allowed for LAST should be either
-0 or 1.
+    -l LAST (short form) or either --last or
+    --no-last (long form):
+    Set the value of the boolean "last" parameter.
+    For the short form, the values allowed for LAST should be either
+    0 or 1.
 
--m MIN (short form) or either --min or --no-min (long form).
-Set the value of the boolean "min" parameter.
-For the short form, the values allowed for MIN should be either
-0 or 1.
+    -m MIN (short form) or either --min or --no-min (long form).
+    Set the value of the boolean "min" parameter.
+    For the short form, the values allowed for MIN should be either
+    0 or 1.
 ```
