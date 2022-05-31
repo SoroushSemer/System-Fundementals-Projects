@@ -1,6 +1,6 @@
 # HW3 - ```SFMM``` DYNAMIC MEMORY ALLOCATOR #
 
-```SFMM``` is a dynamic memory allocator written in C that uses the following memory management methods:
+```SFMM``` is a dynamic memory allocator  with custom ```malloc```, ```free```, and ```realloc``` functions written in C that uses the following memory management methods:
    * Free lists segregated by size class, using first-fit policy within each size class,augmented with a set of "quick lists" holding small blocks segregated by size.
    * Immediate coalescing of large blocks on free with adjacent free blocks; delayed coalescing on free of small blocks.
    * Boundary tags to support efficient coalescing, with footer optimization that allows footers to be omitted from allocated blocks.
